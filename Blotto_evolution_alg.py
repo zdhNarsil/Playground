@@ -18,7 +18,9 @@ Bob	    2	4	5	20	12	3	4	1	40	9
 In this game, Alice wins 1, 2, 7, 8 for 18 points, and Bob wins 4, 6 for 10 points. 
 No one wins castle 3, 5, 9, 10.
 
-We use evolution algorithm to solve this question
+We use evolution algorithm to solve this question.
+
+
 '''
 
 
