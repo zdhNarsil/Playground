@@ -1,3 +1,8 @@
+'''
+Results: Revnet防不住FGSM，正确率会从90%掉到10%
+
+'''
+
 import torch
 import torchvision
 import torchvision.transforms as transforms
