@@ -2,6 +2,21 @@ import torch
 import torchvision
 from torchvision import transforms
 from tqdm import tqdm
+import argparse
+import GPUtil
+
+'''
+Results: 
+For 2-linear layers model the test accuracy can get somewhat 95%.
+Even for a simple model like this, the test accuracy deduces to 2/10000, 
+sometimes 1/10000 (test set has 10000 images) under the simplest attack (FGSM). 
+'''
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--no-cuda", action="store_true")
+args = parser.parse_args()
+
+CUDA = torch.cuda.is_available() and (not args.no_cuda)
 
 
 def FGSM(model, input, label, eta=1.):
@@ -9,6 +24,8 @@ def FGSM(model, input, label, eta=1.):
 
     input.requires_grad = True
     criterion = torch.nn.CrossEntropyLoss()
+    if CUDA:
+        criterion = criterion.cuda()
 
     model.zero_grad()
     loss = criterion(model(input), label)
@@ -49,13 +66,25 @@ if __name__ == '__main__':
     criterion = torch.nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), )
 
+    if CUDA:
+        deviceIDs = [0]
+        # deviceIDs = GPUtil.getAvailable(order='first', limit=4, maxLoad=0.1,
+        #                                 maxMemory=0.1, excludeID=[], excludeUUID=[])
+        print('available cuda device ID(s):', deviceIDs)
+        torch.cuda.set_device(deviceIDs[0])
+        model.cuda()
+        criterion = criterion.cuda()
+
     # train
-    for i in range(1):
+    for i in range(3):
         correct = 0
         total = 0
         train_loss = 0.
         for j, data in enumerate(tqdm(train_loader)):
             images, labels = data
+
+            if CUDA:
+                images, labels = images.cuda(), labels.cuda()
             images = images.reshape((-1, 784))
             pred = model(images)
 
@@ -69,16 +98,19 @@ if __name__ == '__main__':
             correct += predicted.eq(labels.data).sum().item()
             total += len(labels)
             acc = correct / total
-            print('train loss:', train_loss / (j + 1), 'accuracy:', acc)
+            print('\ntrain loss:', train_loss / (j + 1), 'accuracy:', acc)
 
     # test or attack
     correct = 0
     total = 0
     for j, data in enumerate(tqdm(test_loader)):
         images, labels = data
+        if CUDA:
+            images, labels = images.cuda(), labels.cuda()
+
         images = images.reshape((-1, 784))
-        #     pred = model(FGSM(model, images, labels))  # attack
-        pred = model(images)  # test
+        pred = model(FGSM(model, images, labels))  # attack
+        # pred = model(images)  # test
 
         _, predicted = torch.max(pred.data, 1)
         correct += predicted.eq(labels.data).sum().item()
