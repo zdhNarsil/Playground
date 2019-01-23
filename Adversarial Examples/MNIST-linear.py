@@ -19,14 +19,7 @@ def FGSM(model, input, label, eta=1.):
     return input + eta * grad_sign
 
 
-if __name__ == '__main__':
-    model = torch.nn.Sequential(
-        torch.nn.Linear(784, 1024),
-        torch.nn.ReLU(),
-        torch.nn.Linear(1024, 10),
-        torch.nn.Softmax(),
-    )
-
+def load_MNIST():
     transform_train = transforms.Compose([
         transforms.ToTensor(),
     ])
@@ -41,6 +34,18 @@ if __name__ == '__main__':
     train_loader = torch.utils.data.DataLoader(train_data, batch_size=32, shuffle=True)
     test_loader = torch.utils.data.DataLoader(test_data, batch_size=32, shuffle=True)
 
+    return train_loader, test_loader
+
+
+if __name__ == '__main__':
+    model = torch.nn.Sequential(
+        torch.nn.Linear(784, 1024),
+        torch.nn.ReLU(),
+        torch.nn.Linear(1024, 10),
+        torch.nn.Softmax(),
+    )
+
+    train_loader, test_loader = load_MNIST()
     criterion = torch.nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), )
 
