@@ -188,3 +188,31 @@ if __name__ == '__main__':
             pop_index %= POP_SIZE
 
     print('\n全过程中找到的最好布兵：', best_ever, '其fitness为：', get_fitness(best_ever, single=True))
+
+    for _ in range(20):
+        # initialize the pop (POP_SIZE,10)
+        pop = sample_soldiers()
+        for _ in range(POP_SIZE - 1):
+            pop = np.vstack((pop, sample_soldiers()))
+
+        best_ever = sample_soldiers()
+        for _ in range(N_GENERATIONS):
+            fitness = get_fitness(pop, justwin=True)  # 把justwin设成False就会进化到最坏情况。。。什么鬼？？
+            fitness += fitness.min()  # 为了变成正数
+            best_present = pop[np.argmax(fitness), :]
+            # print("找到的最好的布兵: ", best_present)
+            if get_fitness(best_ever, single=True) < get_fitness(best_present, single=True):
+                best_ever = best_present
+
+            pop = select(pop, fitness)
+
+            pop_copy = pop.copy()  # ？？
+
+            for parent in pop:
+                # 随机选一个杂交
+                i_ = np.random.randint(0, POP_SIZE, size=1)
+                child = crossover(parent, pop_copy[i_])
+
+                child = mutate(child)
+                parent[:] = child
+        print('\n全过程中找到的最好布兵：', best_ever, '其fitness为：', get_fitness(best_ever, single=True))
