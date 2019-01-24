@@ -13,7 +13,7 @@ The number of soldiers on each castle is then compared, and for each castle:
 Here is an example:
 Castle	C1	C2	C3	C4	C5	C6	C7	C8	C9	C10
 Alice	5	10	10	7	19	1	10	8	20	10
-Bob	    2	4	5	20	12	3	4	1	40	9
+Bob	    2	4 	5	20	12	3	4	1	40	9
 
 In this game, Alice wins 1, 2, 7, 8 for 18 points, and Bob wins 4, 6 for 10 points. 
 No one wins castle 3, 5, 9, 10.
