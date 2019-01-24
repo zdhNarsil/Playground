@@ -3,27 +3,20 @@ import os
 import numpy as np
 import math
 from datetime import datetime
-
-from torch.autograd import Variable
+import seaborn as sns
+import matplotlib
+from matplotlib.animation import FuncAnimation
+import matplotlib.pyplot as plt
+plt.switch_backend('agg')
 
 import torch.nn as nn
 import torch
 import shutil
 
-import matplotlib.pyplot as plt
-
-plt.switch_backend('agg')
-import seaborn as sns
-import matplotlib
-
 # os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
-path = 'images_ensemble_mG' + "{0:%Y-%m-%d}_{0:%H-%M-%S}".format(datetime.now())
-os.makedirs(path, exist_ok=True)
-shutil.rmtree(path)
-os.makedirs(path, exist_ok=True)
-
 parser = argparse.ArgumentParser()
+
 parser.add_argument('--n_epochs', type=int, default=300, help='number of epochs of training')
 parser.add_argument('--batch_size', type=int, default=64, help='size of the batches')
 parser.add_argument('--lr', type=float, default=0.0002, help='adam: learning rate')
@@ -36,6 +29,7 @@ parser.add_argument('--channels', type=int, default=1, help='number of image cha
 parser.add_argument('--sample_interval', type=int, default=400, help='interval betwen image samples')
 parser.add_argument('--n_paths_D', type=int, default=1, help='number of paths of discriminator')
 parser.add_argument('--n_paths_G', type=int, default=8, help='number of paths of generator')
+
 opt = parser.parse_args()
 print(opt)
 
@@ -45,6 +39,8 @@ print(opt)
 #    torch.cuda.manual_seed(1)
 
 cuda = True if torch.cuda.is_available() else False
+
+path = 'images_ensemble_mG' + "{0:%Y-%m-%d}_{0:%H-%M-%S}".format(datetime.now())
 
 
 class Generator(nn.Module):
@@ -129,18 +125,21 @@ optimizer_D = torch.optim.Adam(discriminator.parameters(), lr=opt.lr, betas=(opt
 
 Tensor = torch.cuda.FloatTensor if cuda else torch.FloatTensor
 
-images = []
+# ----------
+#  Training
+# ----------
 n_batch = math.ceil(data_size / opt.batch_size)
+colors = matplotlib.cm.rainbow(np.linspace(0, 1, 1 + opt.n_paths_G))
 
-for epoch in range(opt.n_epochs):
-    colors = matplotlib.cm.rainbow(np.linspace(0, 1, 1 + opt.n_paths_G))
-    plt.plot(data[:, 0].cpu().numpy(), data[:, 1].cpu().numpy(), color=colors[0], marker='.', linestyle='None')
-    z = Variable(Tensor(np.random.normal(0, 1, (8000 // opt.n_paths_G, opt.latent_dim))))
+
+# j相当于第j个epoch
+def update(j):
+    z = Tensor(np.random.normal(0, 1, (8000 // opt.n_paths_G, opt.latent_dim)))
 
     # 看下此时generator的8个path能把隐空间分别输出成啥样
     for k in range(opt.n_paths_G):
         gen_data = generator.paths[k](z).detach()
-        plt.plot(gen_data[:, 0].cpu().numpy(), gen_data[:, 1].cpu().numpy(), color=colors[1 + k], marker='.',
+        ax.plot(gen_data[:, 0].cpu().numpy(), gen_data[:, 1].cpu().numpy(), color=colors[1 + k], marker='.',
                  linestyle='None')
 
     for i in range(n_batch):
@@ -148,11 +147,11 @@ for epoch in range(opt.n_epochs):
         imgs = data[i * opt.batch_size:min((i + 1) * opt.batch_size, data_size - 1), :]
 
         # Adversarial ground truths
-        valid = Variable(Tensor(imgs.size(0), opt.n_paths_D).fill_(1.0), requires_grad=False)
-        fake = Variable(Tensor(imgs.size(0), opt.n_paths_D).fill_(0.0), requires_grad=False)
+        valid = Tensor(imgs.size(0), opt.n_paths_D).fill_(1.0)
+        fake = Tensor(imgs.size(0), opt.n_paths_D).fill_(0.0)
 
         # Configure input
-        real_imgs = Variable(imgs.type(Tensor))
+        real_imgs = imgs.type(Tensor)
 
         # -----------------
         #  Train Generator
@@ -161,7 +160,7 @@ for epoch in range(opt.n_epochs):
         optimizer_G.zero_grad()
 
         # Sample noise as generator input
-        z = Variable(Tensor(np.random.normal(0, 1, (imgs.shape[0], opt.latent_dim))))
+        z = Tensor(np.random.normal(0, 1, (imgs.shape[0], opt.latent_dim)))
 
         g_loss = 0
         for k in range(opt.n_paths_G):
@@ -196,21 +195,36 @@ for epoch in range(opt.n_epochs):
         optimizer_D.step()
 
         print("[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f] [D value: %f]" % (
-        epoch + 1, opt.n_epochs, i, n_batch,
+        j + 1, opt.n_epochs, i, n_batch,
         d_loss.item(), g_loss.item(), discriminator(real_imgs).mean(0).mean().item()))
 
-    colors = matplotlib.cm.rainbow(np.linspace(0, 1, 1 + opt.n_paths_G))
-    plt.plot(data[:, 0].cpu().numpy(), data[:, 1].cpu().numpy(), color=colors[0], marker='.', linestyle='None')
+    ax.plot(data[:, 0].cpu().numpy(), data[:, 1].cpu().numpy(), color=colors[0], marker='.', linestyle='None')
 
-    z = Variable(Tensor(np.random.normal(0, 1, (8000 // opt.n_paths_G, opt.latent_dim))))
-    temp = []
+    z = Tensor(np.random.normal(0, 1, (8000 // opt.n_paths_G, opt.latent_dim)))
+    # temp = []
     for k in range(opt.n_paths_G):
         # temp.append(generator.paths[k](z).detach())
         # gen_data = torch.cat(temp, dim=0)
         # sns.jointplot(gen_data[:, 0].cpu().numpy(), gen_data[:, 1].cpu().numpy(), kind='kde', stat_func=None)
         gen_data = generator.paths[k](z).detach()
-        plt.plot(gen_data[:, 0].cpu().numpy(), gen_data[:, 1].cpu().numpy(), color=colors[1 + k], marker='.',
+        ax.plot(gen_data[:, 0].cpu().numpy(), gen_data[:, 1].cpu().numpy(), color=colors[1 + k], marker='.',
                  linestyle='None')
 
-    plt.savefig(os.path.join(path, '%d.png' % epoch))
-    plt.close('all')
+    # plt.savefig(os.path.join(path, '%d.png' % j))
+    # plt.close('all')
+
+    label = 'timestep {0}'.format(j)
+    ax.set_xlabel(label)
+
+    return line, ax
+
+
+# if __name__ == '__main__':
+fig, ax = plt.subplots()
+fig.set_tight_layout(True)   # ?
+
+line, = ax.plot(data[:, 0].cpu().numpy(), data[:, 1].cpu().numpy(), color=colors[0], marker='.', linestyle='None')
+
+
+anim = FuncAnimation(fig, update, frames=5, interval=100)
+anim.save(path + ' gif', dpi=80, writer='imagemagick')
