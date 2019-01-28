@@ -5,13 +5,14 @@ from tqdm import tqdm
 import argparse
 import GPUtil
 
-from attack import FGSM
+from attack import FGSM, IPGD
 
 '''
 Results: 
 For 2-linear layers model the test accuracy can get somewhat 95%.
-Even for a simple model like this, the test accuracy deduces to 2/10000, 
-sometimes 1/10000 (test set has 10000 images) under the simplest attack (FGSM). 
+Even for a simple model like this (MNIST, 2 linear layers)
+the test accuracy deduces to 2/10000, 
+sometimes 0/10000 (test set has 10000 images) under the simplest attack (FGSM). 
 '''
 
 parser = argparse.ArgumentParser()
@@ -22,13 +23,16 @@ parser.add_argument("--save-path", type=str, default='./MNIST-linear.pt')
 parser.add_argument("--load", action="store_true")
 parser.add_argument("--load-path", type=str, default='./MNIST-linear.pt')
 parser.add_argument("--test", action="store_true")  # default: attack
+parser.add_argument("--attack", choices=['FGSM', 'IPGD'], default='FGSM')
+parser.add_argument("--batch-size", type=int, default=32)
+parser.add_argument("--train-epoch", type=int, default=3)
 
 args = parser.parse_args()
 
 CUDA = torch.cuda.is_available() and (not args.no_cuda)
 
 
-def load_MNIST():
+def load_MNIST(batch_size):
     transform_train = transforms.Compose([
         transforms.ToTensor(),
     ])
@@ -36,12 +40,12 @@ def load_MNIST():
         transforms.ToTensor(),
     ])
 
-    train_data = torchvision.datasets.MNIST(root='./data', train=True
+    train_data = torchvision.datasets.MNIST(root='./data/mnist', train=True
                                             , download=True, transform=transform_train)
-    test_data = torchvision.datasets.MNIST(root='./data', train=False
+    test_data = torchvision.datasets.MNIST(root='./data/mnist', train=False
                                            , download=True, transform=transform_test)
-    train_loader = torch.utils.data.DataLoader(train_data, batch_size=32, shuffle=True)
-    test_loader = torch.utils.data.DataLoader(test_data, batch_size=32, shuffle=True)
+    train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, shuffle=True)
+    test_loader = torch.utils.data.DataLoader(test_data, batch_size=batch_size, shuffle=True)
 
     return train_loader, test_loader
 
@@ -54,7 +58,8 @@ if __name__ == '__main__':
         torch.nn.Softmax(),
     )
 
-    train_loader, test_loader = load_MNIST()
+    train_loader, test_loader = load_MNIST(args.batch_size)
+    criterion = torch.nn.CrossEntropyLoss()
 
     if CUDA:
         deviceIDs = [0]
@@ -63,19 +68,16 @@ if __name__ == '__main__':
         print('available cuda device ID(s):', deviceIDs)
         torch.cuda.set_device(deviceIDs[0])
         model.cuda()
+        criterion = criterion.cuda()
 
     if args.load:
         # load state_dict
         model.load_state_dict(torch.load(args.load_path))
     else:
         # train
-        criterion = torch.nn.CrossEntropyLoss()
         optimizer = torch.optim.Adam(model.parameters(), )
 
-        if CUDA:
-            criterion = criterion.cuda()
-
-        for i in range(3):
+        for i in range(args.train_epoch):
             correct = 0
             total = 0
             train_loss = 0.
@@ -97,7 +99,7 @@ if __name__ == '__main__':
                 correct += predicted.eq(labels.data).sum().item()
                 total += len(labels)
                 acc = correct / total
-                print('\ntrain loss:', train_loss / (j + 1), 'accuracy:', acc)
+                print('\nepoch:', i, 'train loss:', train_loss / (j + 1), 'accuracy:', acc)
 
         # save state_dict
         if args.save:
@@ -116,7 +118,10 @@ if __name__ == '__main__':
         if args.test:
             pred = model(images)  # test
         else:
-            pred = model(FGSM(model, images, labels, CUDA=CUDA))  # attack
+            if args.attack == 'FGSM':
+                pred = model(FGSM(model, images, labels, criterion=criterion, CUDA=CUDA))  # attack
+            elif args.attack == 'IPGD':
+                pred = model(IPGD(model, images, labels, criterion=criterion, CUDA=CUDA))
 
         _, predicted = torch.max(pred.data, 1)
         correct += predicted.eq(labels.data).sum().item()
