@@ -12,9 +12,8 @@ from attack import FGSM, IPGD
 
 '''
 Results: 
-For 2-linear layers model the test accuracy can get somewhat 95%.
-Even for a simple model like this (MNIST, 2 linear layers)
-the test accuracy deduces to 2/10000, 
+For  model the test accuracy can get somewhat %.
+the test accuracy deduces to /10000, 
 sometimes 0/10000 (test set has 10000 images) under the simplest attack (FGSM). 
 '''
 
@@ -30,6 +29,7 @@ parser.add_argument("--attack", choices=['FGSM', 'IPGD'], default='FGSM')
 parser.add_argument("--batch-size", type=int, default=128)
 parser.add_argument("--train-epoch", type=int, default=10)
 parser.add_argument("--optimizer", type=str, default='SGD', choices=['Adam', 'SGD'])
+parser.add_argument("--adv-ratio", type=float, default=0., help="ratio of advrserial examples in whole training dataset")
 
 args = parser.parse_args()
 
@@ -69,7 +69,7 @@ def load_CIFAR10(batch_size):
 
 class SimpleNet(nn.Module):
     def __init__(self):
-        super(Net, self).__init__()
+        super(SimpleNet, self).__init__()
         self.conv1 = nn.Conv2d(3, 6, 5)
         self.pool = nn.MaxPool2d(2, 2)
         self.conv2 = nn.Conv2d(6, 16, 5)
@@ -112,34 +112,6 @@ class BasicBlock(nn.Module):
         return out
 
 
-class Bottleneck(nn.Module):
-    expansion = 4
-
-    def __init__(self, in_planes, planes, stride=1):
-        super(Bottleneck, self).__init__()
-        self.conv1 = nn.Conv2d(in_planes, planes, kernel_size=1, bias=False)
-        self.bn1 = nn.BatchNorm2d(planes)
-        self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=stride, padding=1, bias=False)
-        self.bn2 = nn.BatchNorm2d(planes)
-        self.conv3 = nn.Conv2d(planes, self.expansion * planes, kernel_size=1, bias=False)
-        self.bn3 = nn.BatchNorm2d(self.expansion * planes)
-
-        self.shortcut = nn.Sequential()
-        if stride != 1 or in_planes != self.expansion * planes:
-            self.shortcut = nn.Sequential(
-                nn.Conv2d(in_planes, self.expansion * planes, kernel_size=1, stride=stride, bias=False),
-                nn.BatchNorm2d(self.expansion * planes)
-            )
-
-    def forward(self, x):
-        out = F.relu(self.bn1(self.conv1(x)))
-        out = F.relu(self.bn2(self.conv2(out)))
-        out = self.bn3(self.conv3(out))
-        out += self.shortcut(x)
-        out = F.relu(out)
-        return out
-
-
 class ResNet(nn.Module):
     def __init__(self, block, num_blocks, num_classes=10):
         super(ResNet, self).__init__()
@@ -173,6 +145,35 @@ class ResNet(nn.Module):
         return out
 
 
+def train(model, train_loader, optimizer, adv_ratio, criterion, attack_method):
+    correct = 0
+    total = 0
+    train_loss = 0.
+    scheduler.step()
+    for j, data in enumerate(tqdm(train_loader)):
+        images, labels = data  # 分别是(N_batch, 3, 32, 32)和（N_batch, 32）
+
+        if CUDA:
+            images, labels = images.cuda(), labels.cuda()
+
+        if torch.rand(1).item() < adv_ratio:
+            images = IPGD(model, images, labels, criterion=criterion, CUDA=CUDA)
+
+        pred = model(images)
+
+        optimizer.zero_grad()
+        loss = criterion(pred, labels)
+        loss.backward()
+        optimizer.step()
+
+        train_loss += loss.item()
+        _, predicted = torch.max(pred.data, 1)  # dim=1  predicted是最大值的下标
+        correct += predicted.eq(labels.data).sum().item()
+        total += len(labels)
+        acc = correct / total
+        print('\nepoch:', i, 'train loss:', train_loss / (j + 1), 'accuracy:', acc)
+
+
 if __name__ == '__main__':
     model = ResNet(BasicBlock, [2, 2, 2, 2])
 
@@ -198,31 +199,11 @@ if __name__ == '__main__':
         elif args.optimizer == 'SGD':
             optimizer = torch.optim.SGD(model.parameters(), lr=0.1, momentum=0.9, weight_decay=5e-4)
 
-        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[150, 250], gamma=0.1)
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[100, 250], gamma=0.1)
 
         for i in range(args.train_epoch):
-            correct = 0
-            total = 0
-            train_loss = 0.
-            scheduler.step()
-            for j, data in enumerate(tqdm(train_loader)):
-                images, labels = data  # 分别是(N_batch, 3, 32, 32)和（N_batch, 32）
-
-                if CUDA:
-                    images, labels = images.cuda(), labels.cuda()
-                pred = model(images)
-
-                optimizer.zero_grad()
-                loss = criterion(pred, labels)
-                loss.backward()
-                optimizer.step()
-
-                train_loss += loss.item()
-                _, predicted = torch.max(pred.data, 1)
-                correct += predicted.eq(labels.data).sum().item()
-                total += len(labels)
-                acc = correct / total
-                print('\nepoch:', i, 'train loss:', train_loss / (j + 1), 'accuracy:', acc)
+            train(model=model, train_loader=train_loader, optimizer=optimizer,
+                  criterion=criterion, adv_ratio=args.adv_ratio)
 
         # save state_dict
         if args.save:
