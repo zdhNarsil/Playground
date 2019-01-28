@@ -5,6 +5,8 @@ from tqdm import tqdm
 import argparse
 import GPUtil
 
+from attack import FGSM
+
 '''
 Results: 
 For 2-linear layers model the test accuracy can get somewhat 95%.
@@ -13,27 +15,17 @@ sometimes 1/10000 (test set has 10000 images) under the simplest attack (FGSM).
 '''
 
 parser = argparse.ArgumentParser()
+
 parser.add_argument("--no-cuda", action="store_true")
+parser.add_argument("--save", action="store_true")
+parser.add_argument("--save-path", type=str, default='./MNIST-linear.pt')
+parser.add_argument("--load", action="store_true")
+parser.add_argument("--load-path", type=str, default='./MNIST-linear.pt')
+parser.add_argument("--test", action="store_true")  # default: attack
+
 args = parser.parse_args()
 
 CUDA = torch.cuda.is_available() and (not args.no_cuda)
-
-
-def FGSM(model, input, label, eta=1.):
-    model.eval()
-
-    input.requires_grad = True
-    criterion = torch.nn.CrossEntropyLoss()
-    if CUDA:
-        criterion = criterion.cuda()
-
-    model.zero_grad()
-    loss = criterion(model(input), label)
-    loss.backward()
-
-    grad_sign = input.grad.sign()
-    input.detach()
-    return input + eta * grad_sign
 
 
 def load_MNIST():
@@ -63,8 +55,6 @@ if __name__ == '__main__':
     )
 
     train_loader, test_loader = load_MNIST()
-    criterion = torch.nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), )
 
     if CUDA:
         deviceIDs = [0]
@@ -73,32 +63,45 @@ if __name__ == '__main__':
         print('available cuda device ID(s):', deviceIDs)
         torch.cuda.set_device(deviceIDs[0])
         model.cuda()
-        criterion = criterion.cuda()
 
-    # train
-    for i in range(3):
-        correct = 0
-        total = 0
-        train_loss = 0.
-        for j, data in enumerate(tqdm(train_loader)):
-            images, labels = data
+    if args.load:
+        # load state_dict
+        model.load_state_dict(torch.load(args.load_path))
+    else:
+        # train
+        criterion = torch.nn.CrossEntropyLoss()
+        optimizer = torch.optim.Adam(model.parameters(), )
 
-            if CUDA:
-                images, labels = images.cuda(), labels.cuda()
-            images = images.reshape((-1, 784))
-            pred = model(images)
+        if CUDA:
+            criterion = criterion.cuda()
 
-            optimizer.zero_grad()
-            loss = criterion(pred, labels)
-            loss.backward()
-            optimizer.step()
+        for i in range(3):
+            correct = 0
+            total = 0
+            train_loss = 0.
+            for j, data in enumerate(tqdm(train_loader)):
+                images, labels = data
 
-            train_loss += loss.item()
-            _, predicted = torch.max(pred.data, 1)
-            correct += predicted.eq(labels.data).sum().item()
-            total += len(labels)
-            acc = correct / total
-            print('\ntrain loss:', train_loss / (j + 1), 'accuracy:', acc)
+                if CUDA:
+                    images, labels = images.cuda(), labels.cuda()
+                images = images.reshape((-1, 784))
+                pred = model(images)
+
+                optimizer.zero_grad()
+                loss = criterion(pred, labels)
+                loss.backward()
+                optimizer.step()
+
+                train_loss += loss.item()
+                _, predicted = torch.max(pred.data, 1)
+                correct += predicted.eq(labels.data).sum().item()
+                total += len(labels)
+                acc = correct / total
+                print('\ntrain loss:', train_loss / (j + 1), 'accuracy:', acc)
+
+        # save state_dict
+        if args.save:
+            torch.save(model.state_dict(), args.save_path)
 
     # test or attack
     correct = 0
@@ -109,8 +112,11 @@ if __name__ == '__main__':
             images, labels = images.cuda(), labels.cuda()
 
         images = images.reshape((-1, 784))
-        pred = model(FGSM(model, images, labels))  # attack
-        # pred = model(images)  # test
+
+        if args.test:
+            pred = model(images)  # test
+        else:
+            pred = model(FGSM(model, images, labels, CUDA=CUDA))  # attack
 
         _, predicted = torch.max(pred.data, 1)
         correct += predicted.eq(labels.data).sum().item()
