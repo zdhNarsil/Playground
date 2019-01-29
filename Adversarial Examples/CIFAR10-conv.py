@@ -7,6 +7,8 @@ from tqdm import tqdm
 import argparse
 import GPUtil
 import pdb
+from datetime import datetime
+from tensorboardX import SummaryWriter
 
 from attack import FGSM, IPGD
 
@@ -20,9 +22,9 @@ sometimes 0/10000 (test set has 10000 images) under the simplest attack (FGSM).
 parser = argparse.ArgumentParser()
 
 parser.add_argument("--no-cuda", action="store_true")
-parser.add_argument("--save", action="store_true")
+parser.add_argument("--save", action="store_true", help='whether to save state_dict of the model')
 parser.add_argument("--save-path", type=str, default='./CIFAR10-conv.pt')
-parser.add_argument("--load", action="store_true")
+parser.add_argument("--load", action="store_true", help='whether to load a pre-trained model')
 parser.add_argument("--load-path", type=str, default='./CIFAR10-conv.pt')
 parser.add_argument("--test", action="store_true")  # default: attack
 parser.add_argument("--attack", choices=['FGSM', 'IPGD'], default='FGSM')
@@ -145,7 +147,7 @@ class ResNet(nn.Module):
         return out
 
 
-def train(model, train_loader, optimizer, adv_ratio, criterion, attack_method):
+def train(epoch_num, model, train_loader, optimizer, adv_ratio, criterion, writer):  # attack_method):
     correct = 0
     total = 0
     train_loss = 0.
@@ -171,10 +173,16 @@ def train(model, train_loader, optimizer, adv_ratio, criterion, attack_method):
         correct += predicted.eq(labels.data).sum().item()
         total += len(labels)
         acc = correct / total
-        print('\nepoch:', i, 'train loss:', train_loss / (j + 1), 'accuracy:', acc)
+        print('\nepoch:', epoch_num, 'train loss: %.3f' % (train_loss / (j + 1)) + ' accuracy:', acc)
+
+        # use tensorboardX
+        writer.add_scalar('train loss', train_loss / (j + 1), epoch_num * len(train_loader) + j)
+        writer.add_scalar('train acc', acc, epoch_num * len(train_loader) + j)
 
 
 if __name__ == '__main__':
+    writer = SummaryWriter('./log/{0:%Y-%m-%d}_{0:%H-%M-%S}'.format(datetime.now()))
+
     model = ResNet(BasicBlock, [2, 2, 2, 2])
 
     train_loader, test_loader = load_CIFAR10(args.batch_size)
@@ -199,11 +207,11 @@ if __name__ == '__main__':
         elif args.optimizer == 'SGD':
             optimizer = torch.optim.SGD(model.parameters(), lr=0.1, momentum=0.9, weight_decay=5e-4)
 
-        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[100, 250], gamma=0.1)
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[150, 250], gamma=0.1)
 
         for i in range(args.train_epoch):
-            train(model=model, train_loader=train_loader, optimizer=optimizer,
-                  criterion=criterion, adv_ratio=args.adv_ratio)
+            train(epoch_num=i, model=model, train_loader=train_loader, optimizer=optimizer,
+                  criterion=criterion, adv_ratio=args.adv_ratio, writer=writer)
 
         # save state_dict
         if args.save:

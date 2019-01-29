@@ -28,7 +28,7 @@ def clip(perturb, norm, eps, CUDA=False):
     avoid_zero_div = torch.tensor(1e-12)
     one = torch.tensor(1.0)
     if CUDA:
-        eps.cuda()
+        # eps.cuda()
         avoid_zero_div.cuda()
         one.cuda()
 
