@@ -196,8 +196,8 @@ for epoch in range(opt.n_epochs):
         optimizer_D.step()
 
         print("[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f] [D value: %f]" % (
-        epoch + 1, opt.n_epochs, i, n_batch,
-        d_loss.item(), g_loss.item(), discriminator(real_imgs).mean(0).mean().item()))
+            epoch + 1, opt.n_epochs, i, n_batch,
+            d_loss.item(), g_loss.item(), discriminator(real_imgs).mean(0).mean().item()))
 
     colors = matplotlib.cm.rainbow(np.linspace(0, 1, 1 + opt.n_paths_G))
     plt.plot(data[:, 0].cpu().numpy(), data[:, 1].cpu().numpy(), color=colors[0], marker='.', linestyle='None')

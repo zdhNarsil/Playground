@@ -16,6 +16,7 @@ import torch
 import shutil
 
 import matplotlib.pyplot as plt
+
 plt.switch_backend('agg')
 import seaborn as sns
 import matplotlib
@@ -40,8 +41,8 @@ parser.add_argument('--n_paths_G', type=int, default=1, help='number of paths of
 opt = parser.parse_args()
 print(opt)
 
-
 cuda = True if torch.cuda.is_available() else False
+
 
 class Generator(nn.Module):
     def __init__(self):
@@ -57,12 +58,12 @@ class Generator(nn.Module):
         modules = nn.ModuleList()
         for _ in range(opt.n_paths_G):
             modules.append(nn.Sequential(
-            *block(opt.latent_dim, 128, normalize=False),
-            *block(128, 256),
-            *block(256, 512),
-            *block(512, 1024),
-            nn.Linear(1024, 2),
-            nn.Tanh()
+                *block(opt.latent_dim, 128, normalize=False),
+                *block(128, 256),
+                *block(256, 512),
+                *block(512, 1024),
+                nn.Linear(1024, 2),
+                nn.Tanh()
             ))
         self.paths = modules
 
@@ -70,8 +71,9 @@ class Generator(nn.Module):
         img = torch.zeros(z.shape[0], 2).cuda()
         for path in self.paths:
             img += path(z)
-        img = img/opt.n_paths_G
+        img = img / opt.n_paths_G  # multi-branch就是对多个generator的输出取平均
         return img
+
 
 class Discriminator(nn.Module):
     def __init__(self):
@@ -85,7 +87,7 @@ class Discriminator(nn.Module):
                 nn.LeakyReLU(0.2, inplace=True),
                 nn.Linear(256, 1),
                 nn.Sigmoid()
-                ))
+            ))
         self.paths = modules
 
     def forward(self, img):
@@ -95,6 +97,7 @@ class Discriminator(nn.Module):
             validity.append(path(img_flat))
         validity = torch.cat(validity, dim=1)
         return validity
+
 
 # Loss function
 adversarial_loss = torch.nn.BCELoss()
@@ -112,14 +115,13 @@ if cuda:
 n_mixture = 8
 radius = 1
 std = 0.01
-thetas = np.linspace(0, 2 * (1-1/n_mixture) * np.pi, n_mixture)
+thetas = np.linspace(0, 2 * (1 - 1 / n_mixture) * np.pi, n_mixture)
 xs, ys = radius * np.sin(thetas), radius * np.cos(thetas)
-data_size = 1000*n_mixture
+data_size = 1000 * n_mixture
 data = torch.zeros(data_size, 2)
 for i in range(data_size):
     coin = np.random.randint(0, n_mixture)
-    data[i, :] = torch.normal(mean=torch.Tensor([xs[coin], ys[coin]]), std=std*torch.ones(1, 2))
-
+    data[i, :] = torch.normal(mean=torch.Tensor([xs[coin], ys[coin]]), std=std * torch.ones(1, 2))
 
 # Optimizers
 optimizer_G = torch.optim.Adam(generator.parameters(), lr=opt.lr, betas=(opt.b1, opt.b2))
@@ -130,19 +132,19 @@ Tensor = torch.cuda.FloatTensor if cuda else torch.FloatTensor
 # ----------
 #  Training
 # ----------
-n_batch = math.ceil(data_size/opt.batch_size)
+n_batch = math.ceil(data_size / opt.batch_size)
 
 for epoch in range(opt.n_epochs):
-    colors = matplotlib.cm.rainbow(np.linspace(0, 1, 1+opt.n_paths_G))
+    colors = matplotlib.cm.rainbow(np.linspace(0, 1, 1 + opt.n_paths_G))
     plt.plot(data[:, 0].cpu().numpy(), data[:, 1].cpu().numpy(), color=colors[0], marker='.', linestyle='None')
-    z = Variable(Tensor(np.random.normal(0, 1, (8000//opt.n_paths_G, opt.latent_dim))))
+    z = Variable(Tensor(np.random.normal(0, 1, (8000 // opt.n_paths_G, opt.latent_dim))))
     for k in range(opt.n_paths_G):
         gen_data = generator.paths[k](z).detach()
-        plt.plot(gen_data[:, 0].cpu().numpy(), gen_data[:, 1].cpu().numpy(), color=colors[1+k], marker='.', linestyle='None')
+        plt.plot(gen_data[:, 0].cpu().numpy(), gen_data[:, 1].cpu().numpy(), color=colors[1 + k], marker='.',
+                 linestyle='None')
 
     for i in range(n_batch):
-
-        imgs = data[i*opt.batch_size:min((i+1)*opt.batch_size, data_size-1), :]
+        imgs = data[i * opt.batch_size:min((i + 1) * opt.batch_size, data_size - 1), :]
 
         # Adversarial ground truths
         valid = Variable(Tensor(imgs.size(0), opt.n_paths_D).fill_(1.0), requires_grad=False)
@@ -188,20 +190,21 @@ for epoch in range(opt.n_epochs):
         d_loss.backward()
         optimizer_D.step()
 
-        print ("[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]" % (epoch+1, opt.n_epochs, i, n_batch,
-                                                            d_loss.item(), g_loss.item()))
-    
-    colors = matplotlib.cm.rainbow(np.linspace(0, 1, 1+opt.n_paths_G))
+        print("[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]" % (epoch + 1, opt.n_epochs, i, n_batch,
+                                                                         d_loss.item(), g_loss.item()))
+
+    colors = matplotlib.cm.rainbow(np.linspace(0, 1, 1 + opt.n_paths_G))
     plt.plot(data[:, 0].cpu().numpy(), data[:, 1].cpu().numpy(), color=colors[0], marker='.', linestyle='None')
-    
-    z = Variable(Tensor(np.random.normal(0, 1, (8000//opt.n_paths_G, opt.latent_dim))))
+
+    z = Variable(Tensor(np.random.normal(0, 1, (8000 // opt.n_paths_G, opt.latent_dim))))
     temp = []
     for k in range(opt.n_paths_G):
         # temp.append(generator.paths[k](z).detach())
-    # gen_data = torch.cat(temp, dim=0)
-    # sns.jointplot(gen_data[:, 0].cpu().numpy(), gen_data[:, 1].cpu().numpy(), kind='kde', stat_func=None)
+        # gen_data = torch.cat(temp, dim=0)
+        # sns.jointplot(gen_data[:, 0].cpu().numpy(), gen_data[:, 1].cpu().numpy(), kind='kde', stat_func=None)
         gen_data = generator.paths[k](z).detach()
-        plt.plot(gen_data[:, 0].cpu().numpy(), gen_data[:, 1].cpu().numpy(), color=colors[1+k], marker='.', linestyle='None')
+        plt.plot(gen_data[:, 0].cpu().numpy(), gen_data[:, 1].cpu().numpy(), color=colors[1 + k], marker='.',
+                 linestyle='None')
 
     plt.savefig('images_branch_mG/%d.png' % epoch)
     plt.close('all')
