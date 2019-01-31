@@ -34,6 +34,7 @@ parser.add_argument('--n_paths_D', type=int, default=1, help='number of paths of
 parser.add_argument('--n_paths_G', type=int, default=8, help='number of paths of generator')
 parser.add_argument('--no-output', action='store_true')
 parser.add_argument('--n-samples-G', type=int, default=8, help='number of samples when training G')
+parser.add_argument('--data-var', type=float, default=0.02, help='the variance used when sampling data')
 
 opt = parser.parse_args()
 print(opt)
@@ -120,7 +121,7 @@ if __name__ == '__main__':
     # Configure data loader
     n_mixture = 8
     radius = 1
-    std = 0.01
+    std = opt.data_var
     thetas = np.linspace(0, 2 * (1 - 1 / n_mixture) * np.pi, n_mixture)
     xs, ys = radius * np.sin(thetas), radius * np.cos(thetas)
     data_size = 1000 * n_mixture
@@ -139,15 +140,15 @@ if __name__ == '__main__':
     n_batch = math.ceil(data_size / opt.batch_size)
 
     for epoch in range(opt.n_epochs):
-        colors = matplotlib.cm.rainbow(np.linspace(0, 1, 1 + opt.n_paths_G))
-        plt.plot(data[:, 0].cpu().numpy(), data[:, 1].cpu().numpy(), color=colors[0], marker='.', linestyle='None')
-        z = Variable(Tensor(np.random.normal(0, 1, (8000 // opt.n_paths_G, opt.latent_dim))))
+        # colors = matplotlib.cm.rainbow(np.linspace(0, 1, 1 + opt.n_paths_G))
+        # plt.plot(data[:, 0].cpu().numpy(), data[:, 1].cpu().numpy(), color=colors[0], marker='.', linestyle='None')
+        # z = Variable(Tensor(np.random.normal(0, 1, (8000 // opt.n_paths_G, opt.latent_dim))))
 
-        # 看下此时generator的8个path能把隐空间分别输出成啥样
-        for k in range(opt.n_paths_G):
-            gen_data = generator.paths[k](z).detach()
-            plt.plot(gen_data[:, 0].cpu().numpy(), gen_data[:, 1].cpu().numpy(), color=colors[1 + k], marker='.',
-                     linestyle='None')
+        # # 看下此时generator的8个path能把隐空间分别输出成啥样
+        # for k in range(opt.n_paths_G):
+        #     gen_data = generator.paths[k](z).detach()
+        #     plt.plot(gen_data[:, 0].cpu().numpy(), gen_data[:, 1].cpu().numpy(), color=colors[1 + k], marker='.',
+        #              linestyle='None')
 
         path_prob = np.ones((opt.n_paths_G,)) / opt.n_paths_G  # 每一branch生成的图片的不真实度
 

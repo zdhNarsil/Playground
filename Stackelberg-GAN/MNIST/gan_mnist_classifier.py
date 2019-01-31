@@ -40,6 +40,7 @@ img_shape = (opt.channels, opt.img_size, opt.img_size)
 
 cuda = True if torch.cuda.is_available() else False
 
+
 class Generator(nn.Module):
     def __init__(self):
         super(Generator, self).__init__()
@@ -54,13 +55,13 @@ class Generator(nn.Module):
         modules = nn.ModuleList()
         for _ in range(opt.n_paths_G):
             modules.append(nn.Sequential(
-            *block(opt.latent_dim, 128),
-            *block(128, 512),
-            #*block(256, 512),
-            #*block(512, 512),
-            #*block(512, 1024),
-            nn.Linear(512, int(np.prod(img_shape))),
-            nn.Tanh()
+                *block(opt.latent_dim, 128),
+                *block(128, 512),
+                # *block(256, 512),
+                # *block(512, 512),
+                # *block(512, 1024),
+                nn.Linear(512, int(np.prod(img_shape))),
+                nn.Tanh()
             ))
         self.paths = modules
 
@@ -70,6 +71,7 @@ class Generator(nn.Module):
             img.append(path(z).view(img.size(0), *img_shape))
         img = torch.cat(img, dim=0)
         return img
+
 
 class Discriminator(nn.Module):
     def __init__(self):
@@ -82,10 +84,10 @@ class Discriminator(nn.Module):
         modules.append(nn.Sequential(
             nn.Linear(256, 1),
             nn.Sigmoid(),
-                ))
+        ))
         modules.append(nn.Sequential(
             nn.Linear(256, 10),
-                ))
+        ))
         self.paths = modules
 
     def forward(self, img):
@@ -94,6 +96,7 @@ class Discriminator(nn.Module):
         validity = self.paths[0](img_flat)
         classifier = F.log_softmax(self.paths[1](img_flat), dim=1)
         return validity, classifier
+
 
 # Loss function
 adversarial_loss = torch.nn.BCELoss()
@@ -116,7 +119,6 @@ dataloader = torch.utils.data.DataLoader(
                        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
                    ])),
     batch_size=opt.batch_size, shuffle=True)
-
 
 # Optimizers
 optimizer_G = torch.optim.Adam(generator.parameters(), lr=opt.lr, betas=(opt.b1, opt.b2))
@@ -154,7 +156,6 @@ for epoch in tqdm(range(opt.n_epochs)):
 
         g_loss = 0
         for k in range(opt.n_paths_G):
-
             # Generate a batch of images
             gen_imgs = generator.paths[k](z)
 
@@ -165,7 +166,7 @@ for epoch in tqdm(range(opt.n_epochs)):
             # Loss measures classifier's ability to classify various generators
             target = Variable(Tensor(imgs.size(0)).fill_(k), requires_grad=False)
             target = target.type(torch.cuda.LongTensor)
-            g_loss += F.nll_loss(classifier, target)*opt.classifier_para
+            g_loss += F.nll_loss(classifier, target) * opt.classifier_para
 
         g_loss.backward()
         optimizer_G.step()
@@ -181,10 +182,9 @@ for epoch in tqdm(range(opt.n_epochs)):
         real_loss = adversarial_loss(validity, valid)
         temp = []
         for k in range(opt.n_paths_G):
-
             # Generate a batch of images
             gen_imgs = generator.paths[k](z).view(imgs.shape[0], *img_shape)
-            temp.append(gen_imgs[0:(100//opt.n_paths_G), :])
+            temp.append(gen_imgs[0:(100 // opt.n_paths_G), :])
 
             # Loss measures discriminator's ability to classify real from generated samples
             validity, classifier = discriminator(gen_imgs.detach())
@@ -194,7 +194,7 @@ for epoch in tqdm(range(opt.n_epochs)):
             # Loss measures classifier's ability to classify various generators
             target = Variable(Tensor(imgs.size(0)).fill_(k), requires_grad=False)
             target = target.type(torch.cuda.LongTensor)
-            d_loss += F.nll_loss(classifier, target)*opt.classifier_para
+            d_loss += F.nll_loss(classifier, target) * opt.classifier_para
 
         plot_imgs = torch.cat(temp, dim=0)
         plot_imgs.detach()
@@ -202,16 +202,17 @@ for epoch in tqdm(range(opt.n_epochs)):
         d_loss.backward()
         optimizer_D.step()
 
-        #print ("[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]" % (epoch, opt.n_epochs, i, len(dataloader),
-                                                            #d_loss.item(), g_loss.item()))
+        # print ("[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]" % (epoch, opt.n_epochs, i, len(dataloader),
+        # d_loss.item(), g_loss.item()))
 
         batches_done = epoch * len(dataloader) + i
         if batches_done % opt.sample_interval == 0:
-            save_image(plot_imgs[:100], 'images_ensemble_mnist10_classifier_small/%d.png' % batches_done, nrow=10, normalize=True)
+            save_image(plot_imgs[:100], 'images_ensemble_mnist10_classifier_small/%d.png' % batches_done, nrow=10,
+                       normalize=True)
 
-    #if epoch % 10 == 0:
-        #torch.save({
-            #'epoch': epoch + 1,
-            #'g_state_dict': generator.state_dict(),
-            #'d_state_dict': discriminator.state_dict(),
-        #}, 'checkpoint_images_ensemble_fashionmnist10_classifier.tar')
+    # if epoch % 10 == 0:
+    # torch.save({
+    # 'epoch': epoch + 1,
+    # 'g_state_dict': generator.state_dict(),
+    # 'd_state_dict': discriminator.state_dict(),
+    # }, 'checkpoint_images_ensemble_fashionmnist10_classifier.tar')

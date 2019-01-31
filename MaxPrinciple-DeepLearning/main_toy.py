@@ -84,8 +84,8 @@ def run_toy(config):
     print('='*100)
 
     tf.logging.set_verbosity(
-        getattr(tf.logging, config['verbosity']))
-    tf.set_random_seed(config['seed'])
+        getattr(tf.logging, config['verbosity'])) #
+    tf.set_random_seed(config['seed']) #
 
     # Generate data
     trainset, testset = generate_datasets(config)
