@@ -7,6 +7,9 @@ Logs*/
 *logs/
 *Log/
 *Logs/
+images_ensemble*/
+
+loss_surface*/
 
 ## misc
 *.vscode/
