@@ -3,6 +3,7 @@ import os
 import numpy as np
 import math
 from datetime import datetime
+import pdb
 
 from torch.autograd import Variable
 
@@ -32,8 +33,10 @@ parser.add_argument('--channels', type=int, default=1, help='number of image cha
 parser.add_argument('--sample_interval', type=int, default=400, help='interval betwen image samples')
 parser.add_argument('--n_paths_D', type=int, default=1, help='number of paths of discriminator')
 parser.add_argument('--n_paths_G', type=int, default=8, help='number of paths of generator')
+parser.add_argument('--n_critic', type=int, default=5, help='number of training steps for discriminator per iter')
 parser.add_argument('--no-output', action='store_true')
 parser.add_argument('--data-var', type=float, default=0.02, help='the variance used when sampling data')
+parser.add_argument('--lambda_gp', type=float, default=2., help='coefficient of gradient penalty')
 opt = parser.parse_args()
 print(opt)
 
@@ -97,12 +100,33 @@ class Discriminator(nn.Module):
         return validity
 
 
+def compute_gradient_penalty(D, real_samples, fake_samples):
+    """Calculates the gradient penalty loss for WGAN GP"""
+    # Random weight term for interpolation between real and fake samples
+    alpha = Tensor(np.random.random((real_samples.size(0), 1,)))
+    # Get random interpolation between real and fake samples
+    interpolates = (alpha * real_samples + ((1 - alpha) * fake_samples)).requires_grad_(True)
+    d_interpolates = D(interpolates)
+    fake = Variable(Tensor(real_samples.shape[0], 1).fill_(1.0), requires_grad=False)
+    # Get gradient w.r.t. interpolates
+    gradients = torch.autograd.grad(
+        outputs=d_interpolates,
+        inputs=interpolates,
+        grad_outputs=fake,
+        create_graph=True,  # 不是要算高阶导数才要True？
+        retain_graph=True,
+        only_inputs=True,
+    )[0]  # autograd.grad 输出是个tuple所以要加 [0]
+    gradients = gradients.view(gradients.size(0), -1)
+    gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean()
+    return gradient_penalty
+
+
 if not opt.no_output:
-    path = 'images_ensemble_mG' + "{0:%Y-%m-%d}_{0:%H-%M-%S}".format(datetime.now())
+    path = 'images_ensemble_wgan_gp_mG' + "{0:%Y-%m-%d}_{0:%H-%M-%S}".format(datetime.now())
     os.makedirs(path, exist_ok=True)
     shutil.rmtree(path)
     os.makedirs(path, exist_ok=True)
-
 
 if __name__ == '__main__':
     # Loss function
@@ -120,7 +144,7 @@ if __name__ == '__main__':
     # Configure data loader
     n_mixture = 8
     radius = 1
-    std = opt.data_var
+    std = 0.01
     thetas = np.linspace(0, 2 * (1 - 1 / n_mixture) * np.pi, n_mixture)
     xs, ys = radius * np.sin(thetas), radius * np.cos(thetas)
     data_size = 1000 * n_mixture
@@ -163,21 +187,20 @@ if __name__ == '__main__':
             # -----------------
             #  Train Generator
             # -----------------
+            if i % opt.n_critic == 0:
+                optimizer_G.zero_grad()
 
-            optimizer_G.zero_grad()
+                # Sample noise as generator input
+                z = Variable(Tensor(np.random.normal(0, 1, (imgs.shape[0], opt.latent_dim))))
 
-            # Sample noise as generator input
-            z = Variable(Tensor(np.random.normal(0, 1, (imgs.shape[0], opt.latent_dim))))
+                g_loss = 0
+                for k in range(opt.n_paths_G):
+                    # Generate a batch of images
+                    gen_imgs = generator.paths[k](z)
+                    g_loss += -torch.mean(discriminator(gen_imgs))
 
-            g_loss = 0
-            for k in range(opt.n_paths_G):
-                # Generate a batch of images
-                gen_imgs = generator.paths[k](z)
-
-                g_loss += adversarial_loss(discriminator(gen_imgs), valid)
-
-            g_loss.backward()
-            optimizer_G.step()
+                g_loss.backward()
+                optimizer_G.step()
 
             # ---------------------
             #  Train Discriminator
@@ -186,14 +209,19 @@ if __name__ == '__main__':
             optimizer_D.zero_grad()
 
             d_loss = 0
-            real_loss = adversarial_loss(discriminator(real_imgs), valid)
+            real_loss = -torch.mean(discriminator(real_imgs))
             for k in range(opt.n_paths_G):
                 # Generate a batch of images
+                z = Variable(Tensor(np.random.normal(0, 1, (imgs.shape[0], opt.latent_dim))))
                 gen_imgs = generator.paths[k](z)
 
                 # Measure discriminator's ability to classify real from generated samples
-                fake_loss = adversarial_loss(discriminator(gen_imgs.detach()), fake)
+                fake_loss = torch.mean(discriminator(gen_imgs.detach()))
                 d_loss += (real_loss + fake_loss) / 2
+
+            # Gradient penalty
+            gradient_penalty = compute_gradient_penalty(discriminator, real_imgs.data, gen_imgs.data)
+            d_loss += opt.lambda_gp * gradient_penalty
 
             d_loss.backward()
             optimizer_D.step()

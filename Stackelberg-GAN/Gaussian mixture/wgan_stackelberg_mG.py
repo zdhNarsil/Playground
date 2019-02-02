@@ -32,8 +32,10 @@ parser.add_argument('--channels', type=int, default=1, help='number of image cha
 parser.add_argument('--sample_interval', type=int, default=400, help='interval betwen image samples')
 parser.add_argument('--n_paths_D', type=int, default=1, help='number of paths of discriminator')
 parser.add_argument('--n_paths_G', type=int, default=8, help='number of paths of generator')
+parser.add_argument('--n_critic', type=int, default=5, help='number of training steps for discriminator per iter')
 parser.add_argument('--no-output', action='store_true')
 parser.add_argument('--data-var', type=float, default=0.02, help='the variance used when sampling data')
+parser.add_argument('--clip_value', type=float, default=0.01, help='lower and upper clip value for disc. weights')
 opt = parser.parse_args()
 print(opt)
 
@@ -98,7 +100,7 @@ class Discriminator(nn.Module):
 
 
 if not opt.no_output:
-    path = 'images_ensemble_mG' + "{0:%Y-%m-%d}_{0:%H-%M-%S}".format(datetime.now())
+    path = 'images_ensemble_wgan_mG' + "{0:%Y-%m-%d}_{0:%H-%M-%S}".format(datetime.now())
     os.makedirs(path, exist_ok=True)
     shutil.rmtree(path)
     os.makedirs(path, exist_ok=True)
@@ -154,8 +156,8 @@ if __name__ == '__main__':
             imgs = data[i * opt.batch_size:min((i + 1) * opt.batch_size, data_size - 1), :]
 
             # Adversarial ground truths
-            valid = Variable(Tensor(imgs.size(0), opt.n_paths_D).fill_(1.0), requires_grad=False)
-            fake = Variable(Tensor(imgs.size(0), opt.n_paths_D).fill_(0.0), requires_grad=False)
+            # valid = Variable(Tensor(imgs.size(0), opt.n_paths_D).fill_(1.0), requires_grad=False)
+            # fake = Variable(Tensor(imgs.size(0), opt.n_paths_D).fill_(0.0), requires_grad=False)
 
             # Configure input
             real_imgs = Variable(imgs.type(Tensor))
@@ -164,20 +166,21 @@ if __name__ == '__main__':
             #  Train Generator
             # -----------------
 
-            optimizer_G.zero_grad()
+            if i % opt.n_critic == 0:
+                optimizer_G.zero_grad()
 
-            # Sample noise as generator input
-            z = Variable(Tensor(np.random.normal(0, 1, (imgs.shape[0], opt.latent_dim))))
+                # Sample noise as generator input
+                z = Variable(Tensor(np.random.normal(0, 1, (imgs.shape[0], opt.latent_dim))))
 
-            g_loss = 0
-            for k in range(opt.n_paths_G):
-                # Generate a batch of images
-                gen_imgs = generator.paths[k](z)
+                g_loss = 0
+                for k in range(opt.n_paths_G):
+                    # Generate a batch of images
+                    gen_imgs = generator.paths[k](z)
 
-                g_loss += adversarial_loss(discriminator(gen_imgs), valid)
+                    g_loss += -torch.mean(discriminator(gen_imgs))
 
-            g_loss.backward()
-            optimizer_G.step()
+                g_loss.backward()
+                optimizer_G.step()
 
             # ---------------------
             #  Train Discriminator
@@ -186,17 +189,21 @@ if __name__ == '__main__':
             optimizer_D.zero_grad()
 
             d_loss = 0
-            real_loss = adversarial_loss(discriminator(real_imgs), valid)
+            real_loss = -torch.mean(discriminator(real_imgs))
             for k in range(opt.n_paths_G):
                 # Generate a batch of images
                 gen_imgs = generator.paths[k](z)
 
                 # Measure discriminator's ability to classify real from generated samples
-                fake_loss = adversarial_loss(discriminator(gen_imgs.detach()), fake)
+                fake_loss = torch.mean(discriminator(gen_imgs.detach()))
                 d_loss += (real_loss + fake_loss) / 2
 
             d_loss.backward()
             optimizer_D.step()
+
+            # Clip weights of discriminator
+            for p in discriminator.parameters():
+                p.data.clamp_(-opt.clip_value, opt.clip_value)
 
             print("[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f] [D value: %f]" % (
                 epoch + 1, opt.n_epochs, i, n_batch,
