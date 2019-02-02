@@ -84,8 +84,8 @@ def run_toy(config):
     print('='*100)
 
     tf.logging.set_verbosity(
-        getattr(tf.logging, config['verbosity'])) #
-    tf.set_random_seed(config['seed']) #
+        getattr(tf.logging, config['verbosity']))
+    tf.set_random_seed(config['seed'])
 
     # Generate data
     trainset, testset = generate_datasets(config)
@@ -94,12 +94,14 @@ def run_toy(config):
     input = tf.placeholder(
         tf.float32, [None, config['num_nodes']], name='input')
     output = tf.placeholder(tf.float32, [None, 1], name='output')
-    net = network.Network(name='msa_net')
+    # net = network.Network(name='msa_net')
+    net = network.advNetwork(input_shape=(1, config['num_nodes']),
+                             name='adv_msa_net')
 
     for n in range(config['num_layers']):
         if n == 0:
             net.add(layers.ResidualDense(
-                input_shape=(input.shape[1:]),
+                input_shape=(input.shape[1:]),#
                 units=config['num_nodes'], activation=config['activation'],
                 msa_rho=config['rho'], msa_reg=config['reg'],
                 kernel_initializer=tf.truncated_normal_initializer(
@@ -107,7 +109,7 @@ def run_toy(config):
                 bias_initializer=tf.constant_initializer(config['bias_init']),
                 delta=config['delta'], name='residualdense_{}'.format(n)))
         else:
-            net.add(layers.ResidualDense(
+            net.add(layers.ResidualDense(#
                 units=config['num_nodes'], activation=config['activation'],
                 msa_rho=config['rho'], msa_reg=config['reg'],
                 kernel_initializer=tf.truncated_normal_initializer(
@@ -121,11 +123,16 @@ def run_toy(config):
     sess = tf.Session()
 
     # MSA trainer
-    msa_trainer = train.MSATrainer(
+    # msa_trainer = train.MSATrainer(
+    #         network=net,
+    #         name='MSA_trainer',
+    #         maxiter=config['msa_maxiter'],
+    #         perturb_init=config['msa_perturb_init'])#
+    msa_trainer = train.advMSATrainer(
         network=net,
         name='MSA_trainer',
         maxiter=config['msa_maxiter'],
-        perturb_init=config['msa_perturb_init'])
+        perturb_init=config['msa_perturb_init'])#
     msa_trainer.initialize(sess)
     msa_trainer.train(
         session=sess,

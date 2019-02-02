@@ -44,7 +44,7 @@ class ScipyOptimizer(Base):
             are computed, with evaluated fetches supplied as positional arguments.
         **run_kwargs: kwargs to pass to `session.run`.
         """
-        session = session or tf.get_default_session()
+        session = session or tf.get_default_session()  # 如果session是None，则把default session赋进去
         feed_dict = feed_dict or {}
         fetches = fetches or []
 

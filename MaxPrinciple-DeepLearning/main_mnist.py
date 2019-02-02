@@ -62,7 +62,9 @@ def run_mnist(config):
     input = tf.placeholder(
         tf.float32, [None, 28, 28, config['lift_dimension']], name='input')
     output = tf.placeholder(tf.float32, [None, 10], name='output')
-    net = network.Network(name='msa_net')
+    # net = network.Network(name='msa_net')
+    net = network.advNetwork(input_shape=(1, 28, 28, config['lift_dimension']),
+                             name='adv_msa_net')
 
     net.add(layers.Conv2D(
         input_shape=input.shape[1:],
@@ -116,7 +118,12 @@ def run_mnist(config):
     sess = tf.Session()
 
     # MSA trainer
-    msa_trainer = train.MSATrainer(
+    # msa_trainer = train.MSATrainer(
+    #     network=net,
+    #     name='MSA_trainer',
+    #     maxiter=config['msa_maxiter'],
+    #     perturb_init=config['msa_perturb_init'])
+    msa_trainer = train.advMSATrainer(
         network=net,
         name='MSA_trainer',
         maxiter=config['msa_maxiter'],

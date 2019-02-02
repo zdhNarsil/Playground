@@ -29,7 +29,7 @@ class Trainer(object):
         self.name = name
         self.kwargs = kwargs
         self._add_loss()
-        self._add_train_ops()
+        self._add_train_ops()  # 扔出一个NotImplementedError不会报错(因为在子类里implement了)
 
     def initialize(self, session):
         session.run(tf.global_variables_initializer())
@@ -48,7 +48,7 @@ class Trainer(object):
         for step in range(num_steps):
             input_batch, label_batch = dataset.next_batch(buffer_size)
             feed_dict = {
-                self.network.input: input_batch,
+                self.network.input: input_batch,#
                 self.network.label: label_batch,
             }
             loss += session.run(self.loss, feed_dict)
@@ -108,7 +108,8 @@ class Trainer(object):
 
 
 class MSATrainer(Trainer):
-    """Implementation of the E-MSA algorithm
+    """
+    Implementation of the E-MSA algorithm
     """
 
     def _get_placeholders(self, list_of_tensors, prefix):
@@ -134,6 +135,7 @@ class MSATrainer(Trainer):
         self.objectives, self.optimizers = [], []
         for n, layer in enumerate(self.network.layers):
             if layer.msa_trainable:
+                # 计算extended Hamilton
                 objective = layer.msa_minus_H_aug(
                         self.ph_xs[n], self.ph_ys[n],
                         self.ph_ps[n], self.ph_qs[n])
@@ -160,13 +162,104 @@ class MSATrainer(Trainer):
             [self.network.msa_xs, self.network.msa_ps],
             feed_dict
         )
+
         for n, opt in enumerate(self.optimizers):
             if opt is not None:
+                # 这里这个optimizer的用法和tf的optimizer用法不一样
                 opt.minimize(
                     session, {
                         self.ph_xs[n]: xval[n],
                         self.ph_ys[n]: xval[n+1],
                         self.ph_ps[n]: pval[n+1],
+                        self.ph_qs[n]: pval[n]
+                    }
+                )
+
+
+class advMSATrainer(Trainer):
+    """
+    Implementation of the E-MSA algorithm
+    """
+
+    def _get_placeholders(self, list_of_tensors, prefix):
+        return [
+            tf.placeholder(t.dtype, t.shape, prefix+'_ph_{}'.format(i))
+            for i, t in enumerate(list_of_tensors)
+        ]
+
+    def _add_train_ops(self):
+        self.ph_xs = self._get_placeholders(
+            list_of_tensors=self.network.msa_xs[:-1],
+            prefix='xs')
+        self.ph_ys = self._get_placeholders(
+            list_of_tensors=self.network.msa_xs[1:],
+            prefix='ys')
+        self.ph_ps = self._get_placeholders(
+            list_of_tensors=self.network.msa_ps[1:],
+            prefix='ps')
+        self.ph_qs = self._get_placeholders(
+            list_of_tensors=self.network.msa_ps[:-1],
+            prefix='qs')
+
+        self.objectives, self.optimizers = [], []
+        for n, layer in enumerate(self.network.layers):
+            if layer.msa_trainable:
+                # 计算extended Hamilton
+                objective = layer.msa_minus_H_aug(
+                        self.ph_xs[n], self.ph_ys[n],
+                        self.ph_ps[n], self.ph_qs[n])
+                optimizer = ScipyOptimizer(
+                    objective, var_list=layer.variables,
+                    perturb_init=self.kwargs['perturb_init'],
+                    method='L-BFGS-B',
+                    options={"maxiter": self.kwargs['maxiter']})
+                # 自己加的对抗扰动
+                if n == 0:
+                    objective0 = -layer.msa_minus_H_aug(
+                        self.ph_xs[n], self.ph_ys[n],
+                        self.ph_ps[n], self.ph_qs[n])
+                    self.optimizer0 = ScipyOptimizer(
+                        objective0, var_list=[self.network.eta],#
+                        perturb_init=self.kwargs['perturb_init'],
+                        method='L-BFGS-B',
+                        options={"maxiter": self.kwargs['maxiter']})
+
+            else:
+                objective = None
+                optimizer = None
+            self.objectives.append(objective)
+            self.optimizers.append(optimizer)
+
+    def _train_step(self, session, dataset, batch_size):
+        # TODO: (1) Without PHs (2) Parallelize
+        # TODO: (3) BFGS on GPU (4) Variable rho
+        input_batch, label_batch = dataset.next_batch(batch_size)
+        feed_dict = {
+            self.network.input: input_batch,
+            self.network.label: label_batch,
+        }
+        xval, pval = session.run(
+            [self.network.msa_xs, self.network.msa_ps],
+            feed_dict
+        )
+
+        for n, opt in enumerate(self.optimizers):
+            if opt is not None:
+                # 这里这个optimizer的用法和tf的optimizer用法不一样
+                opt.minimize(
+                    session, {
+                        self.ph_xs[n]: xval[n],
+                        self.ph_ys[n]: xval[n+1],
+                        self.ph_ps[n]: pval[n+1],
+                        self.ph_qs[n]: pval[n]
+                    }
+                )
+            if n == 0:
+                self.optimizer0.minimize(
+                    session, {
+                        self.ph_xs[n]: xval[n],
+                        self.ph_ys[n]: xval[n + 1],
+                        self.ph_ps[n]: pval[n + 1],
                         self.ph_qs[n]: pval[n]
                     }
                 )

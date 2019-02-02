@@ -33,14 +33,14 @@ class MSALayer(Base.Layer):
         self.msa_trainable = msa_trainable
 
     def msa_regularizer(self):
-        if self.variables:
-            return self.msa_reg * tf.add_n([
+        if self.variables: #self.variables？？可能是tf.layer自带？
+            return self.msa_reg * tf.add_n([                # tf.add_n()列表内元素相加
                 tf.nn.l2_loss(v) for v in self.variables])
         else:
             return 0.0
 
     def msa_hamiltonian(self, x, p):
-        return tf.reduce_sum(p * self.apply(x))
+        return tf.reduce_sum(p * self.apply(x))  # apply()是直接调网络调那一层
 
     def msa_backward(self, x, p):
         """Compute p_{n}
