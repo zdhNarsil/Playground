@@ -1,5 +1,15 @@
-# Maximum Principle Based Algorithms for Deep Learning
+# (Adv. Training Modification) Maximum Principle Based Algorithms for Deep Learning
 
+*From Narsil*: 
+
+After reading through Prof. Li's codes, I have made some small changes in `msalib.network.Network()` and 
+`msalib.train.MSATrainer()` and then get `advNetwork` and `advMSATrainer` respectively.
+  
+In `main_toy.py` or `train_mnist.py`, we only need to use `advNetwork` and `advMSATrainer` to take place of their
+original version, simultaneously specifying the shape of input when defining `advNetwork`, then somehow we can get an optimal
+control version of adversarial training. I'm not sure about its feasibility but there seems no bug.
+
+----
 Tensorflow implementations of the E-MSA algorithm introduced in
 
 *Maximum Principle Based Algorithms for Deep Learning.
