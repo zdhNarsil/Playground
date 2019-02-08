@@ -65,7 +65,7 @@ class MSALayer(Base.Layer):
 
         Arguments:
             x {tf tensor} -- x_{n}
-            y {tf tensor} -- x_{n+1}
+            y {tf tensor} -- x_{n+1} 应该就是v
             p {tf tensor} -- p_{n+1}
             q {tf tensor} -- p_{n}
 

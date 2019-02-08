@@ -219,7 +219,7 @@ class advMSATrainer(Trainer):
                         self.ph_xs[n], self.ph_ys[n],
                         self.ph_ps[n], self.ph_qs[n])
                     self.optimizer0 = ScipyOptimizer(
-                        objective0, var_list=[self.network.eta],#
+                        objective0, var_list=[self.network.eta],
                         perturb_init=self.kwargs['perturb_init'],
                         method='L-BFGS-B',
                         options={"maxiter": self.kwargs['maxiter']})

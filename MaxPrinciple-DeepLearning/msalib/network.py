@@ -67,7 +67,7 @@ class advNetwork(tf.keras.Sequential):
             input {tf tensor} -- initial state
         """
 
-        super().apply(input + self.eta) #
+        super().apply(input + self.eta)  # 加上了对抗扰动eta
         self.msa_xs = [l.input for l in self.layers] + [self.output, ]
 
     def _msa_add_terminal_loss(self, label, loss_func):

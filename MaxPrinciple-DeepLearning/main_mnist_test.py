@@ -118,34 +118,24 @@ def run_mnist(config):
     net.summary()
     sess = tf.Session()
 
-    # start = time.time()
-    # # MSA trainer
     # msa_trainer = train.MSATrainer(
     #     network=net,
     #     name='MSA_trainer',
     #     maxiter=config['msa_maxiter'],
     #     perturb_init=config['msa_perturb_init'])
     # msa_trainer.initialize(sess)
-    # msa_trainer.train(
-    #     session=sess,
-    #     trainset=trainset,
-    #     testset=testset,
-    #     batch_size=config['batch_size'],
-    #     num_epochs=config['num_epochs'],
-    #     buffer_size=config['buffer_size'],
-    #     print_step=config['print_step'])
-    # print('natural train time usage:', time.time() - start)  # 2089s
     # saver = tf.train.Saver(save_relative_paths=True)
-    # saver.save(sess, "./checkpoints/natural_model.ckpt")
+    # saver.save(sess, "./checkpoints/adv_model.ckpt")
 
-    adv_start = time.time()
-    msa_advtrainer = train.advMSATrainer(
+    start = time.time()
+    # MSA trainer
+    msa_trainer = train.MSATrainer(
         network=net,
         name='MSA_trainer',
         maxiter=config['msa_maxiter'],
         perturb_init=config['msa_perturb_init'])
-    msa_advtrainer.initialize(sess)
-    msa_advtrainer.train(
+    msa_trainer.initialize(sess)
+    msa_trainer.train(
         session=sess,
         trainset=trainset,
         testset=testset,
@@ -153,9 +143,30 @@ def run_mnist(config):
         num_epochs=config['num_epochs'],
         buffer_size=config['buffer_size'],
         print_step=config['print_step'])
-    print('adv train time usage:', time.time() - adv_start)  # 1626s???
+    print('natural train time usage:', time.time() - start)  # 2089s
 
-    print('adv test loss = ', msa_advtrainer._compute_loss(sess, testset, buffer_size=1))
+    test_loss = msa_trainer._compute_loss(sess, testset, buffer_size=1)  # buffer_size是啥？
+    print('test loss = ', test_loss)  # 没训时是2.321012425303459 训了是0.42973020489
+    # saver = tf.train.Saver(save_relative_paths=True)
+    # saver.save(sess, "./checkpoints/natural_model.ckpt")
+
+    # adv_start = time.time()
+    # msa_advtrainer = train.advMSATrainer(
+    #     network=net,
+    #     name='MSA_trainer',
+    #     maxiter=config['msa_maxiter'],
+    #     perturb_init=config['msa_perturb_init'])
+    # msa_advtrainer.initialize(sess)
+    # msa_advtrainer.train(
+    #     session=sess,
+    #     trainset=trainset,
+    #     testset=testset,
+    #     batch_size=config['batch_size'],
+    #     num_epochs=config['num_epochs'],
+    #     buffer_size=config['buffer_size'],
+    #     print_step=config['print_step'])
+    # print('adv train time usage:', time.time() - adv_start)  # 1626s???
+    #
     # saver = tf.train.Saver(save_relative_paths=True)
     # saver.save(sess, "./checkpoints/adv_model.ckpt")
 
