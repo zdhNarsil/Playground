@@ -12,6 +12,8 @@ import argparse
 import numpy as np
 from tqdm import tqdm
 
+import sys
+# sys.path.append('..')
 from pytorch_utils import idx2onehot, normalizevector, crossentropy, kldivergence, eval_one_epoch
 from pytorch_cvae import cVAE
 from pytorch_vat import Net
@@ -20,11 +22,12 @@ parser = argparse.ArgumentParser()
 
 parser.add_argument('--seed', type=int, default=123)
 parser.add_argument('--no-CUDA', action='store_true')
+parser.add_argument('--gpu', type=int, default=0, help='Which gpu to use')
 # parser.add_argument('--iter-per-epoch', type=int, default=400)
 parser.add_argument('--epoch', type=int, default=31)
 parser.add_argument('--lr-decay-epoch', type=int, default=21)
 parser.add_argument('--lr', type=float, default=1e-3)
-parser.add_argument('--batch-size', type=int, default=32)
+parser.add_argument('--batch-size-l', type=int, default=32)
 parser.add_argument('--batch-size-ul', type=int, default=128)
 parser.add_argument('--coef-vat1', type=float, default=1)
 parser.add_argument('--coef-vat2', type=float, default=1)
@@ -96,26 +99,39 @@ if __name__ == '__main__':
             # conditional vae graph
             # x_recon, mu, logvar = vae(x_ul, out_ul)
             mu, logvar = vae.encode(x_ul, out_ul)
-            z = vae.reparamenterize(mu, logvar)
+            z = vae.reparameterize(mu, logvar)
             x_recon = vae.decode(z, out_ul)
-            x_gen = vae.decode(torch.randn((out_ul.shape[0], args.latent_dim)), out_ul)  # ？
+            if use_CUDA:
+                z_rand = torch.randn((out_ul.shape[0], args.latent_dim)).cuda()
+            else:
+                z_rand = torch.randn((out_ul.shape[0], args.latent_dim))
+            x_gen = vae.decode(z_rand, out_ul)  # ？
             vae_loss = vae.BCE(x_recon, x_ul) + vae.KLD(mu, logvar)
 
             # TNAR graph
-            r0 = torch.zeros_like(z).requires_grad_()
+            r0 = torch.zeros_like(z)#.requires_grad_()
+            r0.requires_grad = True
             x_recon_r0 = vae.decode(z + r0, out_ul)
             diff2 = 0.5 * torch.sum((x_recon - x_recon_r0) ** 2, dim=1)  #
-            diffJaco = torch.autograd.grad(diff2, r0)[0]  #
+            diffJaco = torch.autograd.grad(torch.sum(diff2), r0, create_graph=True,)[0]  #??
 
             # power method: compute tagent adv & loss
+            # 在这里requires grad，让r_adv成为叶节点，就不能在下面r_adv*=1e-6 in place操作了
+            # r_adv = normalizevector(torch.randn(z.shape)).requires_grad_()
             r_adv = normalizevector(torch.randn(z.shape)).requires_grad_()
+            r_adv = r_adv.detach()
+            if use_CUDA:
+                r_adv = r_adv.cuda()
             for j in range(1):
-                r_adv *= 1e-6
+                r_adv = 1e-6 * r_adv
+                # r_adv.requires_grad_()
                 x_r = vae.decode(z + r_adv, out_ul)
-                out_r = model(x_r - x_recon + x_ul)  # x_r - x_recon 是原文里的 r(eta)
+                out_r = model(x_r - x_recon + x_ul.reshape(-1, 784))  # x_r - x_recon 是原文里的 r(eta)
                 kl = kldivergence(out_r, out_ul)  # 原文里的F(x, r(eta), theta)
-                r_adv = torch.autograd.grad(kl, r_adv.detach())[0]
-                r_adv.detach_()#?
+                r_adv = torch.autograd.grad(kl, r_adv)[0].detach()
+                # r_adv.detach_()#?报错
+                r_adv = r_adv.detach()
+
                 r_adv = normalizevector(r_adv)
 
                 # begin cg
@@ -123,13 +139,13 @@ if __name__ == '__main__':
                 pk = rk + 0.  # pk是原文里的mu？
                 xk = torch.zeros_like(rk)  #
                 for k in range(4):
-                    Apk = torch.autograd.grad(diffJaco * pk, r0)[0].detach_()  #
+                    Apk = torch.autograd.grad(torch.sum(diffJaco * pk), r0, retain_graph=True)[0]#.detach()  #
                     pkApk = torch.sum(pk * Apk, dim=1, keepdim=True)
                     rk2 = torch.sum(rk * rk, dim=1, keepdim=True)
                     mask = rk2 > 1e-8
                     alphak = (rk2 / (pkApk + 1e-8)) * mask.float()
-                    xk += alphak * pk
-                    rk -= alphak * Apk
+                    xk = xk + alphak * pk
+                    rk = rk - alphak * Apk
                     betak = torch.sum(rk * rk, dim=1, keepdim=True) / (rk2 + 1e-8)
                     pk = rk + betak * pk
                 # end cg
@@ -137,21 +153,26 @@ if __name__ == '__main__':
 
             x_adv = vae.decode(z + r_adv * args.epsilon1, out_ul)
             r_x = x_adv - x_recon
-            out_adv = model(x_ul + r_x)#.detach_()
-            vat_tangent_loss = kldivergence(out_adv, out_ul.detach())#为啥detach？
+            out_adv = model(x_ul.reshape(-1, 784) + r_x) #.detach_()
+            vat_tangent_loss = kldivergence(out_adv, out_ul.detach())
 
             # 计算 normal regularization
             r_x = normalizevector(r_x)
+            x_ul = x_ul.reshape(-1, 784)
             r_adv_orth = normalizevector(torch.randn(x_ul.shape))
+            if use_CUDA:
+                r_adv_orth = r_adv_orth.cuda()
             for j in range(1):
                 r_adv_orth1 = 1e-6 * r_adv_orth
+                r_adv_orth1.requires_grad = True
                 out_r = model(x_ul + r_adv_orth1)
                 kl = kldivergence(out_r, out_ul)
                 r_adv_orth1 = torch.autograd.grad(kl, r_adv_orth1)[0] / 1e-6
-                r_adv_orth1.detach_()
+                # r_adv_orth1.detach_()
+                r_adv_orth1 = r_adv_orth1.detach()
                 # 这里的args.zeta是原文里的lambda
                 r_adv_orth = r_adv_orth1 \
-                             - args.zeta * (torch.sum(r_x * r_adv_orth, dim=1, keepdims=True) * r_x) \
+                             - args.zeta * (torch.sum(r_x * r_adv_orth, dim=1, keepdim=True) * r_x) \
                              + args.zeta * r_adv_orth
                 r_adv_orth = normalizevector(r_adv_orth)
             out_adv_orth = model(x_ul + r_adv_orth * args.epsilon2)

@@ -6,7 +6,7 @@ import argparse
 import GPUtil
 
 from attack import FGSM, IPGD
-
+from pytorch_data import load_MNIST
 '''
 Results: 
 For 2-linear layers model the test accuracy can get somewhat 95%.
@@ -32,24 +32,6 @@ args = parser.parse_args()
 CUDA = torch.cuda.is_available() and (not args.no_cuda)
 
 
-def load_MNIST(batch_size):
-    transform_train = transforms.Compose([
-        transforms.ToTensor(),
-    ])
-    transform_test = transforms.Compose([
-        transforms.ToTensor(),
-    ])
-
-    train_data = torchvision.datasets.MNIST(root='./data/mnist', train=True
-                                            , download=True, transform=transform_train)
-    test_data = torchvision.datasets.MNIST(root='./data/mnist', train=False
-                                           , download=True, transform=transform_test)
-    train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, shuffle=True)
-    test_loader = torch.utils.data.DataLoader(test_data, batch_size=batch_size, shuffle=True)
-
-    return train_loader, test_loader
-
-
 if __name__ == '__main__':
     model = torch.nn.Sequential(
         torch.nn.Linear(784, 1024),
@@ -58,7 +40,7 @@ if __name__ == '__main__':
         torch.nn.Softmax(),
     )
 
-    train_loader, test_loader = load_MNIST(args.batch_size)
+    train_loader, test_loader = load_MNIST(args.batch_size, './data/mnist')
     criterion = torch.nn.CrossEntropyLoss()
 
     if CUDA:

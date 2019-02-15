@@ -46,7 +46,8 @@ def main():
     os.environ['CUDA_VISIBLE_DEVICES'] = str(deviceIDs[0])
 
     # dataset
-    Dataset = np.load(os.environ['HOME'] + '/datasets/fashion/fashion.npz')
+    # Dataset = np.load(os.environ['HOME'] + '/datasets/fashion/fashion.npz')
+    Dataset = np.load('fashion.npz')
     Xul_train = Dataset['xtrain'][0:60000]
     Yul_train = Dataset['ytrain'][0:60000]
     X_test = Dataset['xtest']
@@ -81,10 +82,11 @@ def main():
     vae_train_step = tf.train.AdamOptimizer(lr).minimize(vae_loss, var_list=vae_weight_list)
 
     # TNAR graph
-    r0 = tf.zeros_like(z, name='zero_holder')
-    x_recon_r0 = vae.decode(z + r0, out_ul)
-    diff2 = 0.5 * tf.reduce_sum((x_recon - x_recon_r0) ** 2, axis=1)
-    diffJaco = tf.gradients(diff2, r0)[0]
+    r0 = tf.zeros_like(z, name='zero_holder')  # [128 100]
+    x_recon_r0 = vae.decode(z + r0, out_ul)  # [128 784]
+    diff2 = 0.5 * tf.reduce_sum((x_recon - x_recon_r0) ** 2, axis=1)  # [128,]
+    # tf.gradients(y, x) 等于 tf.gradients(tf.reduce_sum(y), x)，其shape和x的shape一样
+    diffJaco = tf.gradients(diff2, r0)[0]  # [128 100]
 
     def normalizevector(r):
         r /= (1e-12 + tf.reduce_max(tf.abs(r), axis=1, keepdims=True))
@@ -198,6 +200,7 @@ def main():
             writer.add_summary(test_summary, ep)
             print('epoch', ep, 'ce', loss_ce, 'vat1', loss_vat, 'vat2', loss_vat2, 'vae', loss_vae)
             print('epoch', ep, 'acc', acc)
+
             if ep % 10 == 0:
                 saver.save(sess, os.path.join(log_dir, 'model'), ep)
     print(args)

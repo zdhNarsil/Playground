@@ -11,7 +11,7 @@ from datetime import datetime
 from tensorboardX import SummaryWriter
 
 from attack import FGSM, IPGD
-
+from pytorch_data import load_CIFAR10
 '''
 Results: 
 For  model the test accuracy can get somewhat %.
@@ -36,37 +36,6 @@ parser.add_argument("--adv-ratio", type=float, default=0., help="ratio of advrse
 args = parser.parse_args()
 
 CUDA = torch.cuda.is_available() and (not args.no_cuda)
-
-
-def load_CIFAR10(batch_size):
-    # transform_train = transforms.Compose([
-    #     transforms.ToTensor(),
-    # ])
-    # transform_test = transforms.Compose([
-    #     transforms.ToTensor(),
-    #     ])
-
-    transform_train = transforms.Compose([
-        transforms.RandomCrop(32, padding=4), #?
-        transforms.RandomHorizontalFlip(),
-        transforms.ToTensor(),
-        # 全体cifar10的均值和方差
-        transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
-    ])
-
-    transform_test = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
-    ])
-
-    train_data = torchvision.datasets.CIFAR10(root='./data/cifar10', train=True
-                                              , download=True, transform=transform_train)
-    test_data = torchvision.datasets.CIFAR10(root='./data/cifar10', train=False
-                                             , download=True, transform=transform_test)
-    train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, shuffle=True)
-    test_loader = torch.utils.data.DataLoader(test_data, batch_size=batch_size, shuffle=True)
-
-    return train_loader, test_loader
 
 
 class SimpleNet(nn.Module):
@@ -185,7 +154,7 @@ if __name__ == '__main__':
 
     model = ResNet(BasicBlock, [2, 2, 2, 2])
 
-    train_loader, test_loader = load_CIFAR10(args.batch_size)
+    train_loader, test_loader = load_CIFAR10(args.batch_size, './data/cifar10')
     criterion = torch.nn.CrossEntropyLoss()
 
     if CUDA:
