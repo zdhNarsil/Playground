@@ -49,7 +49,7 @@ class NeuralNetwork(object):
             layer_object {layers.AbstractLayer} -- Layer object
         """
         assert not self.finalized, 'Graph already finalized.'
-        layer_object.set_vars(self.out, self.n_layers)
+        layer_object.set_vars(self.out, self.n_layers) 
         self.out = layer_object.forward(self.out)
         self.xs.append(self.out)
         self.regularization_loss += layer_object.regularizer()

@@ -66,7 +66,7 @@ def run_mnist(config):
     # net = network.Network(name='msa_net')
     net = network.advNetwork(input_shape=(1, 28, 28, config['lift_dimension']),
                              name='adv_msa_net')
-
+    # (N, 28, 28, 1)
     net.add(layers.Conv2D(
         input_shape=input.shape[1:],
         filters=config['num_channels'],
@@ -77,11 +77,11 @@ def run_mnist(config):
         msa_reg=config['reg'],
         name='conv2d_0')
     )
-
+    # (N, 28, 28, 5)
     net.add(layers.AveragePooling2D(
         pool_size=2, strides=2, padding=config['padding'], name='avg_pool_0')
     )
-
+    # (N, 14, 14, 5)
     net.add(layers.Conv2D(
         input_shape=input.shape[1:],
         filters=config['num_channels'],
@@ -92,11 +92,11 @@ def run_mnist(config):
         msa_reg=config['reg'],
         name='conv2d_init')
     )
-
+    # (N, 14, 14, 5)
     net.add(layers.AveragePooling2D(
         pool_size=2, strides=2, padding=config['padding'], name='avg_pool_1')
     )
-
+    # (N, 7, 7, 5)
     for n in range(config['num_layers']):
         net.add(layers.ResidualConv2D(
             filters=config['num_channels'],
@@ -107,11 +107,14 @@ def run_mnist(config):
             msa_reg=config['reg'],
             delta=config['delta'],
             name='residualconv2d_{}'.format(n)))
-
-    net.add(layers.Lower(name='lower'))
+    # (N, 7, 7, 5)
+    net.add(layers.Lower(name='lower'))  # 在最后一个维度上求平均 且keep dim = True
+    # (N, 7, 7, 1)
     net.add(layers.Flatten(name='flatten'))
+    # (N, 49)
     net.add(layers.Dense(
         units=10, msa_rho=config['rho'], msa_reg=config['reg'], name='dense'))
+    # (N, 10)
 
     net.msa_compute_x(input)
     net.msa_compute_p(output, loss_func)

@@ -61,7 +61,9 @@ class Trainer(object):
                      buffer_size, print_step=False):
         num_steps = math.ceil(trainset.num_examples / batch_size)
         for step in range(num_steps):
+
             self._train_step(session, trainset, batch_size)
+
             if print_step and step % math.ceil(num_steps / print_step) == 0:
                 train_loss = self._compute_loss(session, trainset, buffer_size)
                 test_loss = self._compute_loss(session, trainset, buffer_size)
@@ -135,7 +137,7 @@ class MSATrainer(Trainer):
         self.objectives, self.optimizers = [], []
         for n, layer in enumerate(self.network.layers):
             if layer.msa_trainable:
-                # 计算extended Hamilton
+                # 计msa_maxiter算extended Hamilton
                 objective = layer.msa_minus_H_aug(
                         self.ph_xs[n], self.ph_ys[n],
                         self.ph_ps[n], self.ph_qs[n])

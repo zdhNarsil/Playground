@@ -65,10 +65,6 @@ class VAE(nn.Module):
         return self.decode(z), mu, logvar
 
 
-model = VAE().to(device)
-optimizer = optim.Adam(model.parameters(), lr=1e-3)
-
-
 # Reconstruction + KL divergence losses summed over all elements and batch
 def loss_function(recon_x, x, mu, logvar):
     BCE = F.binary_cross_entropy(recon_x, x.view(-1, 784), reduction='sum')
@@ -123,11 +119,16 @@ def test(epoch):
     test_loss /= len(test_loader.dataset)
     print('====> Test set loss: {:.4f}'.format(test_loss))
 
+
 def makedirs(dirname):
     if not os.path.exists(dirname):
         os.makedirs(dirname)
 
+
 if __name__ == "__main__":
+    model = VAE().to(device)
+    optimizer = optim.Adam(model.parameters(), lr=1e-3)
+
     for epoch in range(1, args.epochs + 1):
         train(epoch)
         test(epoch)

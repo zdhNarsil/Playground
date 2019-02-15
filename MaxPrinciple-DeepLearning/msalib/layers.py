@@ -131,6 +131,8 @@ class Lower(MSALayer):
 
 class Flatten(Base.Flatten, MSALayer):
     """Flatten layer
+    这个函数就是保留第一个维度，把第一个维度包含的每一子张量展开成一个行向量，
+    返回张量是一个二维的， shape=（batch_size，….）,一般用于卷积神经网络全链接层前的预处理
     """
 
     def __init__(self, *args, **kwargs):

@@ -33,12 +33,12 @@ mnist:
   filter_size: 3
   padding: same
   num_layers: 2
-  rho: 0.03
-  reg: 0.001
+  rho: 0.001   # 0.003 is also good # origin 0.03
+  reg: 0.0001  # 0.001 is also good # origin 0.001
   activation: tanh
   delta: 0.5
   batch_size: 128
-  buffer_size: 512
+  buffer_size: 512  # only in Trainer._compute_loss()
   num_epochs: 1
   sgd_lr: 0.01
   adagrad_lr: 0.01
