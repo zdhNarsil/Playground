@@ -79,16 +79,16 @@ class Net(nn.Module):
 
     def forward(self, x):
         x = x.reshape((-1, 1, 28, 28))
-        x = F.relu_(self.conv1(x))
-        x = F.relu_(self.conv2(x))
+        x = F.relu(self.conv1(x))
+        x = F.relu(self.conv2(x))
         x = F.max_pool2d(x, kernel_size=2, stride=2)
         x = self.lrn1(x)
-        x = F.relu_(self.conv3(x))
-        x = F.relu_(self.conv4(x))
+        x = F.relu(self.conv3(x))
+        x = F.relu(self.conv4(x))
         x = F.max_pool2d(x, kernel_size=2, stride=2)
         x = self.lrn2(x)
         x = x.reshape((-1, 49 * 64))
-        x = F.relu_(self.fc1(x))
+        x = F.relu(self.fc1(x))
         x = self.fc2(x)
         x = F.softmax(x)
         return x

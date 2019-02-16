@@ -93,6 +93,11 @@ def torch_accuracy(output, target, topk=(1,)):
 
     return ans
 
+    # _, predicted = torch.max(pred.data, 1)
+    # correct += predicted.eq(labels.data).sum().item()
+    # total += len(labels)
+    # acc = correct / total
+
 
 class AvgMeter(object):
     name = 'No name'

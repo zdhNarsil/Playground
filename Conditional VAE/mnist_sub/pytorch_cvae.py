@@ -50,12 +50,12 @@ class cVAE(nn.Module):
     def encode(self, x, y):
         x = x.reshape((-1, 1, 28, 28))
         x = self.conv1(x)
-        x = F.relu_(F.max_pool2d(x, kernel_size=2, stride=2))
+        x = F.relu(F.max_pool2d(x, kernel_size=2, stride=2))
         x = self.conv2(x)
-        x = F.relu_(F.max_pool2d(x, kernel_size=2, stride=2))
+        x = F.relu(F.max_pool2d(x, kernel_size=2, stride=2))
 
-        y = F.relu_(self.fc1(y))
-        y = F.relu_(self.fc2(y))
+        y = F.relu(self.fc1(y))
+        y = F.relu(self.fc2(y))
 
         x = x.reshape((-1, 49 * 32))
         x = torch.cat((x, y), 1)
@@ -66,7 +66,7 @@ class cVAE(nn.Module):
     def reparameterize(self, mu, logvar):  # 随机sample
         std = torch.exp(0.5 * logvar)
         eps = torch.randn_like(std)
-        return eps.mul(std).add_(mu)  # torch.mul 是 element wise
+        return eps.mul(std) + mu  # torch.mul 是 element wise
 
     def decode(self, z, y):
         z = torch.cat((z, y), 1)

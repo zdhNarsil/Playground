@@ -11,6 +11,8 @@ from datetime import datetime
 from tensorboardX import SummaryWriter
 
 from attack import FGSM, IPGD
+import sys
+sys.path.append('..')
 from pytorch_data import load_CIFAR10
 '''
 Results: 
@@ -26,12 +28,14 @@ parser.add_argument("--save", action="store_true", help='whether to save state_d
 parser.add_argument("--save-path", type=str, default='./CIFAR10-conv.pt')
 parser.add_argument("--load", action="store_true", help='whether to load a pre-trained model')
 parser.add_argument("--load-path", type=str, default='./CIFAR10-conv.pt')
-parser.add_argument("--test", action="store_true")  # default: attack
-parser.add_argument("--attack", choices=['FGSM', 'IPGD'], default='FGSM')
+# parser.add_argument("--test", action="store_true")  # default: attack
+parser.add_argument("--attack", choices=['FGSM', 'IPGD'], default=None)
 parser.add_argument("--batch-size", type=int, default=128)
 parser.add_argument("--train-epoch", type=int, default=10)
 parser.add_argument("--optimizer", type=str, default='SGD', choices=['Adam', 'SGD'])
+parser.add_argument("--lr", type=float, default=1e-3)
 parser.add_argument("--adv-ratio", type=float, default=0., help="ratio of advrserial examples in whole training dataset")
+parser.add_argument("--log", action='store_true')
 
 args = parser.parse_args()
 
@@ -116,7 +120,7 @@ class ResNet(nn.Module):
         return out
 
 
-def train(epoch_num, model, train_loader, optimizer, adv_ratio, criterion, writer):  # attack_method):
+def train(epoch_num, model, train_loader, optimizer, scheduler, criterion, writer, adv_ratio=0):  # attack_method):
     correct = 0
     total = 0
     train_loss = 0.
@@ -145,12 +149,13 @@ def train(epoch_num, model, train_loader, optimizer, adv_ratio, criterion, write
         print('\nepoch:', epoch_num, 'train loss: %.3f' % (train_loss / (j + 1)) + ' accuracy:', acc)
 
         # use tensorboardX
-        writer.add_scalar('train loss', train_loss / (j + 1), epoch_num * len(train_loader) + j)
-        writer.add_scalar('train acc', acc, epoch_num * len(train_loader) + j)
+        if writer:
+            writer.add_scalar('train loss', train_loss / (j + 1), epoch_num * len(train_loader) + j)
+            writer.add_scalar('train acc', acc, epoch_num * len(train_loader) + j)
 
 
 if __name__ == '__main__':
-    writer = SummaryWriter('./log/{0:%Y-%m-%d}_{0:%H-%M-%S}'.format(datetime.now()))
+    writer = SummaryWriter('./log/{0:%Y-%m-%d}_{0:%H-%M-%S}'.format(datetime.now())) if args.log else None
 
     model = ResNet(BasicBlock, [2, 2, 2, 2])
 
@@ -174,13 +179,13 @@ if __name__ == '__main__':
         if args.optimizer == 'Adam':
             optimizer = torch.optim.Adam(model.parameters(), )
         elif args.optimizer == 'SGD':
-            optimizer = torch.optim.SGD(model.parameters(), lr=0.1, momentum=0.9, weight_decay=5e-4)
+            optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=5e-4)
 
-        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[150, 250], gamma=0.1)
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[31, 250], gamma=0.1)
 
         for i in range(args.train_epoch):
-            train(epoch_num=i, model=model, train_loader=train_loader, optimizer=optimizer,
-                  criterion=criterion, adv_ratio=args.adv_ratio, writer=writer)
+            train(epoch_num=i, model=model, train_loader=train_loader, optimizer=optimizer, scheduler=scheduler,
+                  criterion=criterion, writer=writer, adv_ratio=args.adv_ratio)
 
         # save state_dict
         if args.save:
@@ -194,13 +199,13 @@ if __name__ == '__main__':
         if CUDA:
             images, labels = images.cuda(), labels.cuda()
 
-        if args.test:
-            pred = model(images)  # test
-        else:
+        if args.attack:  # attack
             if args.attack == 'FGSM':
-                pred = model(FGSM(model, images, labels, criterion=criterion, CUDA=CUDA))  # attack
+                pred = model(FGSM(model, images, labels, criterion=criterion, CUDA=CUDA))
             elif args.attack == 'IPGD':
                 pred = model(IPGD(model, images, labels, criterion=criterion, CUDA=CUDA))
+        else:
+            pred = model(images)  # test
 
         _, predicted = torch.max(pred.data, 1)
         correct += predicted.eq(labels.data).sum().item()

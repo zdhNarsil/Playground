@@ -13,7 +13,8 @@ import numpy as np
 from tqdm import tqdm
 
 import sys
-# sys.path.append('..')
+sys.path.append('..')
+sys.path.append('.. ..')
 from pytorch_utils import idx2onehot, normalizevector, crossentropy, kldivergence, eval_one_epoch
 from pytorch_cvae import cVAE
 from pytorch_vat import Net
@@ -108,6 +109,12 @@ if __name__ == '__main__':
             x_gen = vae.decode(z_rand, out_ul)  # ？
             vae_loss = vae.BCE(x_recon, x_ul) + vae.KLD(mu, logvar)
 
+            vae_optimizer.zero_grad()
+            vae_loss.backward()
+            vae_optimizer.step()
+
+            x_ul = x_ul.reshape(-1, 784)
+
             # TNAR graph
             r0 = torch.zeros_like(z)#.requires_grad_()
             r0.requires_grad = True
@@ -117,21 +124,18 @@ if __name__ == '__main__':
 
             # power method: compute tagent adv & loss
             # 在这里requires grad，让r_adv成为叶节点，就不能在下面r_adv*=1e-6 in place操作了
-            # r_adv = normalizevector(torch.randn(z.shape)).requires_grad_()
             r_adv = normalizevector(torch.randn(z.shape)).requires_grad_()
-            r_adv = r_adv.detach()
+            # r_adv = r_adv.detach()
             if use_CUDA:
                 r_adv = r_adv.cuda()
             for j in range(1):
                 r_adv = 1e-6 * r_adv
-                # r_adv.requires_grad_()
+                r_adv.requires_grad = True
                 x_r = vae.decode(z + r_adv, out_ul)
-                out_r = model(x_r - x_recon + x_ul.reshape(-1, 784))  # x_r - x_recon 是原文里的 r(eta)
+                out_r = model(x_r - x_recon + x_ul)  # x_r - x_recon 是原文里的 r(eta)
                 kl = kldivergence(out_r, out_ul)  # 原文里的F(x, r(eta), theta)
                 r_adv = torch.autograd.grad(kl, r_adv)[0].detach()
                 # r_adv.detach_()#?报错
-                r_adv = r_adv.detach()
-
                 r_adv = normalizevector(r_adv)
 
                 # begin cg
@@ -139,7 +143,7 @@ if __name__ == '__main__':
                 pk = rk + 0.  # pk是原文里的mu？
                 xk = torch.zeros_like(rk)  #
                 for k in range(4):
-                    Apk = torch.autograd.grad(torch.sum(diffJaco * pk), r0, retain_graph=True)[0]#.detach()  #
+                    Apk = torch.autograd.grad(torch.sum(diffJaco * pk), r0, retain_graph=True)[0].detach()  #
                     pkApk = torch.sum(pk * Apk, dim=1, keepdim=True)
                     rk2 = torch.sum(rk * rk, dim=1, keepdim=True)
                     mask = rk2 > 1e-8
@@ -153,12 +157,11 @@ if __name__ == '__main__':
 
             x_adv = vae.decode(z + r_adv * args.epsilon1, out_ul)
             r_x = x_adv - x_recon
-            out_adv = model(x_ul.reshape(-1, 784) + r_x) #.detach_()
+            out_adv = model(x_ul + r_x)
             vat_tangent_loss = kldivergence(out_adv, out_ul.detach())
 
             # 计算 normal regularization
             r_x = normalizevector(r_x)
-            x_ul = x_ul.reshape(-1, 784)
             r_adv_orth = normalizevector(torch.randn(x_ul.shape))
             if use_CUDA:
                 r_adv_orth = r_adv_orth.cuda()
@@ -184,10 +187,6 @@ if __name__ == '__main__':
             optimizer.zero_grad()
             total_loss.backward()
             optimizer.step()
-
-            vae_optimizer.zero_grad()
-            vae_loss.backward()
-            vae_optimizer.step()
 
             pbar_dic = OrderedDict()
             pbar_dic['supervised loss'] = '{:.2f}'.format(supervised_loss)
