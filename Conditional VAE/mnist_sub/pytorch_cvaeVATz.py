@@ -123,9 +123,7 @@ if __name__ == '__main__':
             diffJaco = torch.autograd.grad(torch.sum(diff2), r0, create_graph=True,)[0]  #??
 
             # power method: compute tagent adv & loss
-            # 在这里requires grad，让r_adv成为叶节点，就不能在下面r_adv*=1e-6 in place操作了
             r_adv = normalizevector(torch.randn(z.shape)).requires_grad_()
-            # r_adv = r_adv.detach()
             if use_CUDA:
                 r_adv = r_adv.cuda()
             for j in range(1):
@@ -135,7 +133,6 @@ if __name__ == '__main__':
                 out_r = model(x_r - x_recon + x_ul)  # x_r - x_recon 是原文里的 r(eta)
                 kl = kldivergence(out_r, out_ul)  # 原文里的F(x, r(eta), theta)
                 r_adv = torch.autograd.grad(kl, r_adv)[0].detach()
-                # r_adv.detach_()#?报错
                 r_adv = normalizevector(r_adv)
 
                 # begin cg

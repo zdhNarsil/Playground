@@ -6,9 +6,9 @@ import numpy as np
 def FGSM(model, input, label, eta=1., criterion=torch.nn.CrossEntropyLoss(),
          CUDA=False, isIPGD=False):
     model.eval()
-    # input.retain_grad()
+
     if not isIPGD:
-        input.requires_grad = True
+        input.requires_grad = True  # 单独使用FGSM的话就设为True
     if CUDA:
         model.cuda()
         input.cuda()
@@ -29,8 +29,8 @@ def clip(perturb, norm, eps, CUDA=False):
     one = torch.tensor(1.0)
     if CUDA:
         # eps.cuda()
-        avoid_zero_div.cuda()
-        one.cuda()
+        avoid_zero_div = avoid_zero_div.cuda()
+        one = one.cuda()
 
     if norm == np.inf:
         perturb = torch.clamp(perturb, -eps, eps)
@@ -51,7 +51,6 @@ def IPGD(model, input, label, eta=1., eps=6, norm=np.inf, criterion=torch.nn.Cro
 
     model.eval()
     perturb = torch.zeros_like(input)
-    input.requires_grad = True
     if CUDA:
         model.cuda()
         perturb.cuda()

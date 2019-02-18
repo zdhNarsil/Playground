@@ -61,7 +61,7 @@ if __name__ == '__main__':
         #                                 maxMemory=0.1, excludeID=[], excludeUUID=[])
         print('available cuda device ID(s):', deviceIDs)
         torch.cuda.set_device(deviceIDs[0])
-        model.cuda()
+        model = model.cuda()
         criterion = criterion.cuda()
 
     if args.load:

@@ -16,9 +16,6 @@ import torch.nn.functional as F
 import torch
 import shutil
 
-os.makedirs('images_ensemble_mnist10_classifier_small', exist_ok=True)
-shutil.rmtree('images_ensemble_mnist10_classifier_small')
-os.makedirs('images_ensemble_mnist10_classifier_small', exist_ok=True)
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--n_epochs', type=int, default=500, help='number of epochs of training')
@@ -26,15 +23,19 @@ parser.add_argument('--batch_size', type=int, default=100, help='size of the bat
 parser.add_argument('--lr', type=float, default=0.0002, help='adam: learning rate')
 parser.add_argument('--b1', type=float, default=0.5, help='adam: decay of first order momentum of gradient')
 parser.add_argument('--b2', type=float, default=0.999, help='adam: decay of first order momentum of gradient')
-parser.add_argument('--n_cpu', type=int, default=8, help='number of cpu threads to use during batch generation')
 parser.add_argument('--latent_dim', type=int, default=100, help='dimensionality of the latent space')
 parser.add_argument('--img_size', type=int, default=28, help='size of each image dimension')
 parser.add_argument('--channels', type=int, default=1, help='number of image channels')
-parser.add_argument('--sample_interval', type=int, default=400, help='interval betwen image samples')
+parser.add_argument('--sample_interval', type=int, default=1000, help='interval betwen image samples')
 parser.add_argument('--n_paths_G', type=int, default=10, help='number of paths of generator')
 parser.add_argument('--classifier_para', type=float, default=1.0, help='regularization parameter for classifier')
+parser.add_argument('--path', type=str,)
 opt = parser.parse_args()
 print(opt)
+
+os.makedirs(opt.path, exist_ok=True)
+shutil.rmtree(opt.path)
+os.makedirs(opt.path, exist_ok=True)
 
 img_shape = (opt.channels, opt.img_size, opt.img_size)
 
@@ -48,7 +49,7 @@ class Generator(nn.Module):
         def block(in_feat, out_feat, normalize=True):
             layers = [nn.Linear(in_feat, out_feat)]
             if normalize:
-                layers.append(nn.BatchNorm1d(out_feat, 0.8))
+                layers.append(nn.BatchNorm1d(out_feat, 0.8)) #0.8是啥？？
             layers.append(nn.LeakyReLU(0.2, inplace=True))
             return layers
 
@@ -68,7 +69,7 @@ class Generator(nn.Module):
     def forward(self, z):
         img = []
         for path in self.paths:
-            img.append(path(z).view(img.size(0), *img_shape))
+            img.append(path(z).view(img.size(0), *img_shape)) # img一个list怎么有size()方法？？
         img = torch.cat(img, dim=0)
         return img
 
@@ -131,7 +132,7 @@ Tensor = torch.cuda.FloatTensor if cuda else torch.FloatTensor
 # ----------
 
 # print("--------Loading Model--------")
-# checkpoint = torch.load('checkpoint_images_ensemble_fashionmnist10_classifier.tar')
+# checkpoint = torch.load(os.oath.join(opt.path, '0checkpoint.tar'))
 # generator.load_state_dict(checkpoint['g_state_dict'])
 # discriminator.load_state_dict(checkpoint['d_state_dict'])
 
@@ -163,6 +164,7 @@ for epoch in tqdm(range(opt.n_epochs)):
             validity, classifier = discriminator(gen_imgs)
             g_loss += adversarial_loss(validity, valid)
 
+            # 加了一项分类loss，用的居然是generator编号作为标签。。。
             # Loss measures classifier's ability to classify various generators
             target = Variable(Tensor(imgs.size(0)).fill_(k), requires_grad=False)
             target = target.type(torch.cuda.LongTensor)
@@ -202,17 +204,17 @@ for epoch in tqdm(range(opt.n_epochs)):
         d_loss.backward()
         optimizer_D.step()
 
-        # print ("[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]" % (epoch, opt.n_epochs, i, len(dataloader),
-        # d_loss.item(), g_loss.item()))
+        print("[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]" % (epoch, opt.n_epochs, i, len(dataloader),
+                                                                         d_loss.item(), g_loss.item()))
 
         batches_done = epoch * len(dataloader) + i
         if batches_done % opt.sample_interval == 0:
-            save_image(plot_imgs[:100], 'images_ensemble_mnist10_classifier_small/%d.png' % batches_done, nrow=10,
+            save_image(plot_imgs[:100], os.path.join(opt.path, '%d.png' % batches_done), nrow=10,
                        normalize=True)
 
-    # if epoch % 10 == 0:
-    # torch.save({
-    # 'epoch': epoch + 1,
-    # 'g_state_dict': generator.state_dict(),
-    # 'd_state_dict': discriminator.state_dict(),
-    # }, 'checkpoint_images_ensemble_fashionmnist10_classifier.tar')
+    if epoch % 50 == 0:
+        torch.save({
+        'epoch': epoch + 1,
+        'g_state_dict': generator.state_dict(),
+        'd_state_dict': discriminator.state_dict(),
+        }, os.path.join(opt.path, '0checkpoint.tar'))

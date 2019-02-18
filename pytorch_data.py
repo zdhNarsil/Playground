@@ -12,7 +12,7 @@ def load_CIFAR10(batch_size, data_dir='./data/cifar10'):
     #     ])
 
     transform_train = transforms.Compose([
-        transforms.RandomCrop(32, padding=4), #?
+        transforms.RandomCrop(32, padding=4),  # ?
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
         # 全体cifar10的均值和方差
@@ -34,14 +34,10 @@ def load_CIFAR10(batch_size, data_dir='./data/cifar10'):
     return train_loader, test_loader
 
 
-def load_MNIST(batch_size, data_dir='./data/mnist'):
-    transform_train = transforms.Compose([
-        transforms.ToTensor(),
-    ])
-    transform_test = transforms.Compose([
-        transforms.ToTensor(),
-    ])
-
+def load_MNIST(batch_size, data_dir='./data/mnist',
+               transform_train=transforms.Compose([transforms.ToTensor(), ]),
+               transform_test=transforms.Compose([transforms.ToTensor(), ])
+               ):
     train_data = torchvision.datasets.MNIST(root=data_dir, train=True
                                             , download=True, transform=transform_train)
     test_data = torchvision.datasets.MNIST(root=data_dir, train=False
