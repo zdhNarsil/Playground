@@ -24,7 +24,7 @@ parser = argparse.ArgumentParser()
 
 parser.add_argument("--no-cuda", action="store_true")
 parser.add_argument("--save", action="store_true")
-parser.add_argument("--save-path", type=str, default='./MNIST-linears.pt')
+parser.add_argument("--save-path", type=str, default='./MNIST-linear.pt')
 parser.add_argument("--load", action="store_true")
 parser.add_argument("--load-path", type=str, default='./MNIST-linear.pt')
 # parser.add_argument("--test", action="store_true")
@@ -56,7 +56,7 @@ if __name__ == '__main__':
     criterion = torch.nn.CrossEntropyLoss()
 
     if CUDA:
-        deviceIDs = [0]
+        deviceIDs = [2]
         # deviceIDs = GPUtil.getAvailable(order='first', limit=4, maxLoad=0.1,
         #                                 maxMemory=0.1, excludeID=[], excludeUUID=[])
         print('available cuda device ID(s):', deviceIDs)
@@ -118,6 +118,8 @@ if __name__ == '__main__':
             if args.attack == 'FGSM':
                 pred = model(FGSM(model, images, labels, criterion=criterion, CUDA=CUDA))  # attack
             elif args.attack == 'IPGD':
+                adv_inp = IPGD(model, images, labels, criterion=criterion, CUDA=CUDA)
+                print(torch.sum(images - adv_inp))
                 pred = model(IPGD(model, images, labels, criterion=criterion, CUDA=CUDA))
         else:
             pred = model(images)  # test

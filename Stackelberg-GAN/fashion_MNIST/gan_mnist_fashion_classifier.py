@@ -16,6 +16,19 @@ import torch.nn.functional as F
 import torch
 import shutil
 
+'''
+0	T-shirt/top（T恤）
+1	Trouser（裤子）
+2	Pullover（套衫）
+3	Dress（裙子）
+4	Coat（外套）
+5	Sandal（凉鞋）
+6	Shirt（汗衫）
+7	Sneaker（运动鞋）
+8	Bag（包）
+9	Ankle boot（踝靴）
+'''
+
 os.makedirs('images_ensemble_fashionmnist10', exist_ok=True)
 shutil.rmtree('images_ensemble_fashionmnist10')
 os.makedirs('images_ensemble_fashionmnist10', exist_ok=True)

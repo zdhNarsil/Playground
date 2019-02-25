@@ -70,11 +70,11 @@ class cVAE(nn.Module):
 
     def decode(self, z, y):
         z = torch.cat((z, y), 1)
-        z = F.relu_(self.fc5(z))
+        z = F.relu(self.fc5(z))
         z = z.reshape((-1, 32, 7, 7))
-        z = F.relu_(self.transconv1(z))
+        z = F.relu(self.transconv1(z))
         # print(z.shape)
-        z = F.sigmoid(self.transconv2(z))
+        z = torch.sigmoid(self.transconv2(z))
         # print(z.shape)
         z = z.reshape((-1, 784))  # 输出伯努利分布的参数
         return z

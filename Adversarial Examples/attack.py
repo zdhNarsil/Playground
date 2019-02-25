@@ -10,8 +10,8 @@ def FGSM(model, input, label, eta=1., criterion=torch.nn.CrossEntropyLoss(),
     if not isIPGD:
         input.requires_grad = True  # 单独使用FGSM的话就设为True
     if CUDA:
-        model.cuda()
-        input.cuda()
+        model = model.cuda()
+        input = input.cuda()
         criterion = criterion.cuda()
 
     model.zero_grad()
@@ -52,9 +52,9 @@ def IPGD(model, input, label, eta=1., eps=6, norm=np.inf, criterion=torch.nn.Cro
     model.eval()
     perturb = torch.zeros_like(input)
     if CUDA:
-        model.cuda()
-        perturb.cuda()
-        criterion.cuda()
+        model = model.cuda()
+        perturb = perturb.cuda()
+        criterion = criterion.cuda()
 
     input.requires_grad = True
     for i in range(num_attack):

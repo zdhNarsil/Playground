@@ -13,11 +13,18 @@ import numpy as np
 from tqdm import tqdm
 
 import sys
+
 sys.path.append('..')
-sys.path.append('.. ..')
-from pytorch_utils import idx2onehot, normalizevector, crossentropy, kldivergence, eval_one_epoch
+sys.path.append('../..')
+sys.path.append('.. .. ..')
+from pytorch_utils import idx2onehot, normalizevector, crossentropy, \
+    kldivergence, eval_one_epoch
 from pytorch_cvae import cVAE
 from pytorch_vat import Net
+
+'''
+200labels下，MNIST分类准确率能到84.08%（未精细调参）
+'''
 
 parser = argparse.ArgumentParser()
 
@@ -98,15 +105,14 @@ if __name__ == '__main__':
             entropy_loss = crossentropy(out_ul, out_ul)
 
             # conditional vae graph
-            # x_recon, mu, logvar = vae(x_ul, out_ul)
-            mu, logvar = vae.encode(x_ul, out_ul)
+            mu, logvar = vae.encode(x_ul, out_ul.detach())
             z = vae.reparameterize(mu, logvar)
-            x_recon = vae.decode(z, out_ul)
+            x_recon = vae.decode(z, out_ul.detach())
             if use_CUDA:
                 z_rand = torch.randn((out_ul.shape[0], args.latent_dim)).cuda()
             else:
                 z_rand = torch.randn((out_ul.shape[0], args.latent_dim))
-            x_gen = vae.decode(z_rand, out_ul)  # ？
+            x_gen = vae.decode(z_rand, out_ul.detach())
             vae_loss = vae.BCE(x_recon, x_ul) + vae.KLD(mu, logvar)
 
             vae_optimizer.zero_grad()
@@ -116,11 +122,11 @@ if __name__ == '__main__':
             x_ul = x_ul.reshape(-1, 784)
 
             # TNAR graph
-            r0 = torch.zeros_like(z)#.requires_grad_()
-            r0.requires_grad = True
+            r0 = torch.zeros_like(z).requires_grad_()
+            # r0.requires_grad = True
             x_recon_r0 = vae.decode(z + r0, out_ul)
             diff2 = 0.5 * torch.sum((x_recon - x_recon_r0) ** 2, dim=1)  #
-            diffJaco = torch.autograd.grad(torch.sum(diff2), r0, create_graph=True,)[0]  #??
+            diffJaco = torch.autograd.grad(torch.sum(diff2), r0, create_graph=True, retain_graph=True)[0]  # ??
 
             # power method: compute tagent adv & loss
             r_adv = normalizevector(torch.randn(z.shape)).requires_grad_()
@@ -128,19 +134,18 @@ if __name__ == '__main__':
                 r_adv = r_adv.cuda()
             for j in range(1):
                 r_adv = 1e-6 * r_adv
-                r_adv.requires_grad = True
                 x_r = vae.decode(z + r_adv, out_ul)
                 out_r = model(x_r - x_recon + x_ul)  # x_r - x_recon 是原文里的 r(eta)
                 kl = kldivergence(out_r, out_ul)  # 原文里的F(x, r(eta), theta)
-                r_adv = torch.autograd.grad(kl, r_adv)[0].detach()
+                r_adv = torch.autograd.grad(kl, r_adv, retain_graph=True)[0].detach() ###
                 r_adv = normalizevector(r_adv)
 
                 # begin cg
-                rk = r_adv + 0.  #
+                rk = r_adv + 0.
                 pk = rk + 0.  # pk是原文里的mu？
-                xk = torch.zeros_like(rk)  #
+                xk = torch.zeros_like(rk)
                 for k in range(4):
-                    Apk = torch.autograd.grad(torch.sum(diffJaco * pk), r0, retain_graph=True)[0].detach()  #
+                    Apk = torch.autograd.grad(torch.sum(diffJaco * pk.detach()), r0, retain_graph=True)[0].detach()  #
                     pkApk = torch.sum(pk * Apk, dim=1, keepdim=True)
                     rk2 = torch.sum(rk * rk, dim=1, keepdim=True)
                     mask = rk2 > 1e-8
@@ -154,7 +159,7 @@ if __name__ == '__main__':
 
             x_adv = vae.decode(z + r_adv * args.epsilon1, out_ul)
             r_x = x_adv - x_recon
-            out_adv = model(x_ul + r_x)
+            out_adv = model(x_ul + r_x.detach())
             vat_tangent_loss = kldivergence(out_adv, out_ul.detach())
 
             # 计算 normal regularization
@@ -168,18 +173,19 @@ if __name__ == '__main__':
                 out_r = model(x_ul + r_adv_orth1)
                 kl = kldivergence(out_r, out_ul)
                 r_adv_orth1 = torch.autograd.grad(kl, r_adv_orth1)[0] / 1e-6
-                # r_adv_orth1.detach_()
                 r_adv_orth1 = r_adv_orth1.detach()
                 # 这里的args.zeta是原文里的lambda
                 r_adv_orth = r_adv_orth1 \
                              - args.zeta * (torch.sum(r_x * r_adv_orth, dim=1, keepdim=True) * r_x) \
                              + args.zeta * r_adv_orth
                 r_adv_orth = normalizevector(r_adv_orth)
+
+            r_adv_orth.detach_()  # 破案了破案了，之前这里漏加了detach
             out_adv_orth = model(x_ul + r_adv_orth * args.epsilon2)
             vat_orth_loss = kldivergence(out_adv_orth, out_ul.detach())
 
             total_loss = supervised_loss + args.coef_ent * entropy_loss \
-                         + args.coef_vat1 * vat_tangent_loss + args.coef_vat2 * vat_orth_loss
+                          + args.coef_vat1 * vat_tangent_loss + args.coef_vat2 * vat_orth_loss
 
             optimizer.zero_grad()
             total_loss.backward()
@@ -193,5 +199,5 @@ if __name__ == '__main__':
             pbar_dic['total loss'] = '{:.2f}'.format(total_loss)
             pbar.set_postfix(pbar_dic)
 
-        acc = eval_one_epoch(model, test_loader)
+        acc = eval_one_epoch(model, test_loader, use_CUDA)
         print('epoch:', i, 'total loss:', total_loss, 'acc:', acc)
