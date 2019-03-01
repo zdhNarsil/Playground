@@ -56,13 +56,16 @@ if __name__ == '__main__':
     criterion = torch.nn.CrossEntropyLoss()
 
     if CUDA:
-        deviceIDs = [2]
+        deviceIDs = [2, ]
         # deviceIDs = GPUtil.getAvailable(order='first', limit=4, maxLoad=0.1,
         #                                 maxMemory=0.1, excludeID=[], excludeUUID=[])
         print('available cuda device ID(s):', deviceIDs)
+        DEVICE = torch.device('cuda:{}'.format(deviceIDs[0]))
         torch.cuda.set_device(deviceIDs[0])
-        model = model.cuda()
-        criterion = criterion.cuda()
+        # model = model.cuda()
+        model = model.to(DEVICE)
+        # criterion = criterion.cuda()
+        criterion = criterion.to(DEVICE)
 
     if args.load:
         # load state_dict
@@ -116,11 +119,13 @@ if __name__ == '__main__':
 
         if args.attack:
             if args.attack == 'FGSM':
-                pred = model(FGSM(model, images, labels, criterion=criterion, CUDA=CUDA))  # attack
+                adv_inp = FGSM(model, images, labels, criterion=criterion, CUDA=CUDA)
+                # print(torch.sum(images - adv_inp))
+                pred = model(adv_inp)
             elif args.attack == 'IPGD':
                 adv_inp = IPGD(model, images, labels, criterion=criterion, CUDA=CUDA)
-                print(torch.sum(images - adv_inp))
-                pred = model(IPGD(model, images, labels, criterion=criterion, CUDA=CUDA))
+                # print(torch.sum(images - adv_inp))
+                pred = model(adv_inp)
         else:
             pred = model(images)  # test
 
