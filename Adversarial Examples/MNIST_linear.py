@@ -20,23 +20,6 @@ the test accuracy deduces to 2/10000,
 sometimes 0/10000 (test set has 10000 images) under the simplest attack (FGSM). 
 '''
 
-parser = argparse.ArgumentParser()
-
-parser.add_argument("--no-cuda", action="store_true")
-parser.add_argument("--save", action="store_true")
-parser.add_argument("--save-path", type=str, default='./MNIST-linear.pt')
-parser.add_argument("--load", action="store_true")
-parser.add_argument("--load-path", type=str, default='./MNIST-linear.pt')
-# parser.add_argument("--test", action="store_true")
-parser.add_argument("--attack", choices=['FGSM', 'IPGD'], default=None)
-parser.add_argument("--batch-size", type=int, default=32)
-parser.add_argument("--train-epoch", type=int, default=3)
-parser.add_argument("--adv-ratio", type=float, default=0., help="ratio of advrserial examples in whole training dataset")
-
-args = parser.parse_args()
-
-CUDA = torch.cuda.is_available() and (not args.no_cuda)
-
 
 class Net(nn.Module):
     def __init__(self):
@@ -51,6 +34,25 @@ class Net(nn.Module):
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument("--no-cuda", action="store_true")
+    parser.add_argument("--save", action="store_true")
+    parser.add_argument("--save-path", type=str, default='./MNIST-linear.pt')
+    parser.add_argument("--load", action="store_true")
+    parser.add_argument("--load-path", type=str, default='./MNIST-linear.pt')
+    # parser.add_argument("--test", action="store_true")
+    parser.add_argument("--attack", choices=['FGSM', 'IPGD'], default=None)
+    parser.add_argument("--batch-size", type=int, default=32)
+    parser.add_argument("--train-epoch", type=int, default=3)
+    parser.add_argument("--adv-ratio", type=float, default=0.,
+                        help="ratio of advrserial examples in whole training dataset")
+
+    args = parser.parse_args()
+
+    CUDA = torch.cuda.is_available() and (not args.no_cuda)
+
+
     model = Net()
     train_loader, test_loader = load_MNIST(args.batch_size, './data/mnist')
     criterion = torch.nn.CrossEntropyLoss()
