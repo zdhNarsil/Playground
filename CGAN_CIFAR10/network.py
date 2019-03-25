@@ -33,8 +33,9 @@ class _netG_CIFAR10(nn.Module):
             nn.Tanh(),
         )
 
-    def forward(self, z, y):
-        input = torch.cat((z, y), dim=1) #
+    # def forward(self, z, y):
+    #   input = torch.cat((z, y), dim=1) #
+    def forward(self, input):
         input = input.view(-1, self.zdim)
         fc1 = self.fc1(input)
         fc1 = fc1.view(-1, 384, 1, 1)
